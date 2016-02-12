@@ -59,7 +59,7 @@ import ConfigParser
 # Customize this path
 #
 
-CONFIG_PATH='/home/jprosser/PyBDR/cm_repl.ini'
+CONFIG_PATH='./cm_repl.ini'
 
 Config = ConfigParser.ConfigParser()
 Config.read(CONFIG_PATH)
@@ -266,14 +266,13 @@ def printHiveResults(result,printDetails):
     for r in result.tables:
       print >>sys.stdout,  r
     
-  print >>sys.stdout,  '\n'
-
   if result.errorCount > 0:
     print >>sys.stdout,  'Errors: '
     for r in result.errors:
       print >>sys.stdout,  r
-  else:
-    print >>sys.stdout,  'No errors occurred.'
+
+  print >>sys.stdout,  '\n'
+
   if result.dataReplicationResult != None:
     print >>sys.stdout,  'numBytesCopied      : ' + str(result.dataReplicationResult.numBytesCopied     )
     print >>sys.stdout,  'numBytesCopyFailed  : ' + str(result.dataReplicationResult.numBytesCopyFailed )
@@ -354,44 +353,47 @@ def updateSchedule(cluster,service,index,attrs):
 #
 def addHiveSchedule(cluster,database,table):
 
+  # retrieve the database only job that we can use as a template.
+    dbSchedule = getHiveSchedule(cluster,HIVE_SERVICE,database,'__template__')
     nowDateTime= datetime.datetime.now()
     yearFromNow = datetime.timedelta(weeks=+52)
-    hiveReplConf = { "interval": 0,"hiveArguments": {"sourceService":
-                                       {"clusterName": "cluster", "serviceName": "hive", "peerName": "JVP1"}, 
-                                       "force": "true", "dryRun": "false", "hdfsArguments": 
-                                       {"userName": "hdfs",
-                                        "dryRun": "false", "abortOnError": "true",
-                                        "preservePermissions": "true",
-                                        "mapreduceServiceName": "yarn",
-                                        "skipChecksumChecks": "false", "preserveXAttrs":
-                                        "true", "exclusionFilters": [], "skipTrash":
-                                        "false", "preserveBlockSize": "true",
-                                        "removeMissingFiles": "false",
-                                        "replicationStrategy": "DYNAMIC",
-                                        "preserveReplicationCount": "true"},
-                                       "replicateImpalaMetadata": "true",
-                                       "replicateData": "true", 
-                                       "tableFilters": [{"tableName": table, "database": database}]}}
+#    hiveReplConf = { "interval": 0,"hiveArguments": {"sourceService":
+#                                       {"clusterName": "cluster", "serviceName": "hive", "peerName": "JVP1"}, 
+#                                       "force": "true", "dryRun": "false", "hdfsArguments": 
+#                                       {"userName": "hdfs",
+#                                        "dryRun": "false", "abortOnError": "true",
+#                                        "preservePermissions": "true",
+#                                        "mapreduceServiceName": "yarn",
+#                                        "skipChecksumChecks": "false", "preserveXAttrs":
+#                                        "true", "exclusionFilters": [], "skipTrash":
+#                                        "false", "preserveBlockSize": "true",
+#                                        "removeMissingFiles": "false",
+#                                        "replicationStrategy": "DYNAMIC",
+#                                        "preserveReplicationCount": "true"},
+#                                       "replicateImpalaMetadata": "true",
+#                                       "replicateData": "true", 
+#                                       "tableFilters": [{"tableName": table, "database": database}]}}
 
 
-    hiveReplArgs = ApiHiveReplicationArguments(hiveReplConf)
+#    hiveReplArgs = ApiHiveReplicationArguments(hiveReplConf)
+    hiveReplArgs = dbSchedule.hiveArguments
     # need to figure out how the above command should work.
-    hiveReplArgs.sourceService= {'clusterName': 'cluster', 'serviceName': HIVE_SERVICE, 'peerName': 'JVP1'}
-    hiveReplArgs.force=True
-    hiveReplArgs.dryRun=False
-    hiveReplArgs.replicateImpalaMetadata=True
-    hiveReplArgs.replicateData=True
+#    hiveReplArgs.sourceService= {'clusterName': 'cluster', 'serviceName': HIVE_SERVICE, 'peerName': 'JVP1'}
+#    hiveReplArgs.force=True
+#    hiveReplArgs.dryRun=False
+#    hiveReplArgs.replicateImpalaMetadata=True
+#    hiveReplArgs.replicateData=True
     hiveReplArgs.tableFilters = [{'tableName': table, 'database': database}]
-    hiveReplArgs.hdfsArguments={'userName': 'hdfs',
-                                        'dryRun': 'false', 'abortOnError': 'true',
-                                        'preservePermissions': 'true',
-                                        'mapreduceServiceName': 'yarn',
-                                        'skipChecksumChecks': 'false', 'preserveXAttrs':
-                                        'true', 'exclusionFilters': [], 'skipTrash':
-                                        'false', 'preserveBlockSize': 'true',
-                                        'removeMissingFiles': 'false',
-                                        'replicationStrategy': 'DYNAMIC',
-                                        'preserveReplicationCount': 'true'}
+#   hiveReplArgs.hdfsArguments={'userName': 'hdfs',
+#                                       'dryRun': 'false', 'abortOnError': 'true',
+#                                       'preservePermissions': 'true',
+#                                       'mapreduceServiceName': 'yarn',
+#                                       'skipChecksumChecks': 'false', 'preserveXAttrs':
+#                                       'true', 'exclusionFilters': [], 'skipTrash':
+#                                       'false', 'preserveBlockSize': 'true',
+#                                       'removeMissingFiles': 'false',
+#                                       'replicationStrategy': 'DYNAMIC',
+#                                       'preserveReplicationCount': 'true'}
 
     hiveService =  cluster.get_service(HIVE_SERVICE)
 
