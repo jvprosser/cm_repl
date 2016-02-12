@@ -20,13 +20,13 @@
 Usage: %s [options]
 
 Options:
--h --help               help message
--t --table [table name] table name for hive backup
--D --db [database name] database for hive backup
--y --dry-run            do a dry run
--s --status             get status
--p --path [path (excluding hdfs://....)] for HDFS backup
--l --list               list replication schedules accessable by this user/group
+ --help               help message
+ --table [table name] table name for hive backup
+ --db [database name] database for hive backup
+ --dry-run            do a dry run
+ --status             get status
+ --path [path (excluding hdfs://....)] for HDFS backup
+ --list               list replication schedules accessable by this user/group
 
 """
 # OMITTED -c --active currently active site [RTP|OMAHA]
@@ -80,6 +80,9 @@ HDFS_SERVICE	= Config.get(cm_section, 'hdfs_service')
 HIVE_SERVICE	= Config.get(cm_section, 'hive_service')	
 HIVE_AUTOCREATE	= Config.get(cm_section, 'hive_autocreate')	
 HDFS_AUTOCREATE	= Config.get(cm_section, 'hdfs_autocreate')	
+MAX_POLLING_RETRIES = Config.get(cm_section, 'max_polling_retries')	
+STATUS_POLL_DELAY   = Config.get(cm_section, 'status_poll_delay')	
+
 
 def getUsername():
   """ get effective userid from process """
@@ -219,9 +222,9 @@ def getDatabaseLocation(database):
 # poll CM until the action is completed or we run out of time.
 #
 def pollReplicationStatus(tries, delay,cluster,service,index):
-    mdelay = delay  # make mutable
+    mdelay = float(delay) # make mutable float
     backoff = 0
-    time.sleep(delay)
+    time.sleep(mdelay)
     for n in range(tries):
         active = getScheduleStatus(cluster,service,index) 
         LOG.debug("Status was " + str(active))
@@ -660,7 +663,7 @@ def main(argv):
 
   # Argument parsing
   try:
-    opts, args = getopt.getopt(argv[1:], 'hD:t:c:sp:yl',
+    opts, args = getopt.getopt(argv[1:], '', #hD:t:sp:yl
                                ['database=','table=','path=','help','status','dry-run','list'])
 
   except getopt.GetoptError, err:
@@ -680,8 +683,9 @@ def main(argv):
   path     = None
 
   for option, val in opts:
-    LOG.info( "option is " + option +" val is " + val)
-
+    LOG.debug( "option is " + option +" val is " + val)
+    # i took the shortargs out of the options config, but left them here in case the
+    # decision was made to bring them back in
     if option in ('-h','--help'):
       usage()
       return -1
@@ -815,7 +819,7 @@ def main(argv):
   result = runSchedule(cluster,service,bdrId,dryRun)
 
   print >>sys.stdout, '\tStart polling for status' 
-  status = pollReplicationStatus(MAX_POLLING_RETRIES, STATUS_POLL_DELAY ,cluster, service, bdrId)
+  status = pollReplicationStatus(int(MAX_POLLING_RETRIES), int(STATUS_POLL_DELAY) ,cluster, service, bdrId)
   if status ==  False:
     return -1
 
