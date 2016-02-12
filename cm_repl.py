@@ -509,7 +509,7 @@ def getHiveSchedule (cluster,service,database,table) :
     if len(output_dict) == 0:
         return None
     else :
-        return output_dict[0].id
+        return output_dict[0]
 
 #
 # get the hdfs schedule for this path
@@ -523,7 +523,7 @@ def getHdfsSchedule (cluster,service,path) :
     if len(output_dict) == 0:
         return None
     else :
-        return output_dict[0].id
+        return output_dict[0]
 
 #
 # get a schedule object given its id
@@ -687,31 +687,33 @@ def main(argv):
   if service == HIVE_SERVICE:
     path = getDatabaseLocation(database)
     LOG.debug('DB location is ' + path)
-    bdrId = getHiveSchedule (CLUSTER,service,database,table) 
+    schedule = getHiveSchedule (CLUSTER,service,database,table) 
   else:
-    bdrId = getHdfsSchedule (CLUSTER,service,path) 
+    schedule = getHdfsSchedule (CLUSTER,service,path) 
 
 # check access privs and abort if none
   if getAccessPriv(procUser,procGroup,path) == False:
     print >>sys.stderr, '\n\tInvalid privs or item does not exist.\n' 
     return -1
   
-  if bdrId == None:
+  if schedule == None:
     if DEVMODE :
       if service == HIVE_SERVICE:
         LOG.info( 'Adding HIVE schedule with table name: ' + table )
         result = addHiveSchedule( CLUSTER, database, table )
         LOG.debug( result.__dict__ )
         LOG.info( 'Getting id for newly added schedule.')
-        bdrId = getHiveSchedule (CLUSTER,service,database,table) 
+        schedule = getHiveSchedule (CLUSTER,service,database,table) 
       else :
         result = addHDFSSchedule(CLUSTER,path)
         LOG.debug( result.__dict__ )
         LOG.info( 'Getting id for newly added schedule.')
-        bdrId = getHdfsSchedule (CLUSTER,service,path)
+        schedule = getHdfsSchedule (CLUSTER,service,path)
     else:
       print >>sys.stderr, '\n\tNo replication schedule defined for this object. '
       return -1
+
+  bdrId = schedule.id
 
   if action == 'getStatus':
     active = getScheduleStatus(CLUSTER,service,bdrId)
