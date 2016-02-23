@@ -172,24 +172,23 @@ def getDatabaseLocation(database):
 #
 # poll CM until the action is completed or we run out of time.
 #
-def pollReplicationStatus(tries, delay,cluster,service,index):
+def pollReplicationStatus(tries, delay,cluster,service,schedule):
     mdelay = float(delay) # make mutable float
     backoff = 0
     time.sleep(mdelay)
     for n in range(tries):
-        schedule = getSchedule(cluster,service,index) 
-        active = getScheduleStatus(cluster,service,schedule) 
-        LOG.debug("Status was " + str(active))
-        if active == True:
-            polling_time = time.strftime('%a, %d %b %Y %H:%M:%S', time.localtime())
-            LOG.debug('{0}. Sleeping for {1} seconds.'.format(polling_time, mdelay))
-            printScheduleStatus (cluster,service,schedule)
-            time.sleep(mdelay)
-            mdelay += backoff
-        else:
-          lastRes=printScheduleLastResult (cluster,service,schedule)
-          LOG.debug('Last Result for {0}. was {1} .'.format(index, str(lastRes)))
-          return lastRes
+      schedule = getSchedule(cluster,service,schedule.id) 
+      active = getScheduleStatus(cluster,service,schedule) 
+      LOG.debug("Status was " + str(active))
+      if active == True:
+        polling_time = time.strftime('%a, %d %b %Y %H:%M:%S', time.localtime())
+        LOG.debug('{0}. Sleeping for {1} seconds.'.format(polling_time, mdelay))
+        printScheduleStatus (cluster,service,schedule)
+        time.sleep(mdelay)
+        mdelay += backoff
+      else:
+        lastRes=printScheduleLastResult (cluster,service,schedule)
+        return lastRes
     # end of for loop
     return False
 #    raise ExceededRetries('Failed to poll {0} within {1} tries.'.format(apifunction, tries))
@@ -217,14 +216,14 @@ def printScheduleStatus (cluster,service,schedule) :
     return schedule.active
 
 
-def getSchedule (cluster,service,index) :
-    serviceItem =  cluster.get_service(service)
-    schedules=serviceItem.get_replication_schedules()
-
-    output_dict = [x for x in schedules if x.id == index ] # and x.Active == True 
-
-    return output_dict[0]
-
+##def getSchedule (cluster,service,index) :
+##    serviceItem =  cluster.get_service(service)
+##    schedules=serviceItem.get_replication_schedules()
+##
+##    output_dict = [x for x in schedules if x.id == index ] # and x.Active == True 
+##
+##    return output_dict[0]
+##
 
 
 #
@@ -235,8 +234,10 @@ def printScheduleLastResult (cluster,service,schedule) :
     if service==HIVE_SERVICE:
       result = schedule.history[0].hiveResult
       printHiveResults(result,True)
-
-      print >>sys.stdout,  '\nFinal Result Message: ' +  schedule.history[0].resultMessage
+      if schedule.history[0].resultMessage != None:
+        print >>sys.stdout,  '\n\tFinal Result Message: ' +  schedule.history[0].resultMessage
+      else:
+        print >>sys.stdout,  '\n\tFinal Result Message: No Message Provided' 
     else:
       printHdfsResults(schedule.history[0].hdfsResult,True)
 
@@ -569,7 +570,7 @@ def main(argv):
   # Argument parsing
   try:
     opts, args = getopt.getopt(argv[1:], '', #hD:t:sp:yl
-                               ['database=','table=','path=','help','status','dry-run','list'])
+                               ['database=','table=','path=','help','status','follow','dry-run','list'])
 
   except getopt.GetoptError, err:
     print >>sys.stderr, err
@@ -601,6 +602,8 @@ def main(argv):
       table =  val
     elif option in ('-y','--dry-run'):
       dryRun = True
+    elif option in ('-f','--follow'):
+      action='followStatus'
     elif option in ('-s','--status'):
       action='getStatus'
     elif option in ('-k','--list'):
@@ -690,14 +693,11 @@ def main(argv):
     print >>sys.stderr, '\n\tInvalid privs or item does not exist.\n' 
     return -1
 
-
   if action == 'getStatus':
     if schedule == None:
       print >>sys.stderr, '\n\tNo replication schedule defined for this object. '
       return -1
     else:
-      bdrId = schedule.id
-      schedule = getSchedule(cluster,service,bdrId)
       active = getScheduleStatus(cluster,service,schedule)
       if active == True :
         print >>sys.stderr, '\n\tThere is currently a replication underway for this schedule.\n'
@@ -707,6 +707,17 @@ def main(argv):
         print >>sys.stderr, '\n\tThere is currently NO replication underway for this schedule.\n'
         printScheduleLastResult (cluster,service,schedule)
         return 0
+
+  if action == 'followStatus':
+    if schedule == None:
+      print >>sys.stderr, '\n\tNo replication schedule defined for this object. '
+      return -1
+    else:
+      print >>sys.stdout, '\tStart polling for status' 
+      status = pollReplicationStatus(int(MAX_POLLING_RETRIES), int(STATUS_POLL_DELAY) ,cluster, service, schedule)
+      if status ==  False:
+        return -1
+      return 0
 
   if schedule == None:
     if service == HIVE_SERVICE and HIVE_AUTOCREATE :
@@ -726,9 +737,9 @@ def main(argv):
 
   print >>sys.stdout, '\tScheduling run for id: ' + str(bdrId)
   result = runSchedule(cluster,service,bdrId,dryRun)
-
+  schedule = getSchedule(cluster,service,bdrId) 
   print >>sys.stdout, '\tStart polling for status' 
-  status = pollReplicationStatus(int(MAX_POLLING_RETRIES), int(STATUS_POLL_DELAY) ,cluster, service, bdrId)
+  status = pollReplicationStatus(int(MAX_POLLING_RETRIES), int(STATUS_POLL_DELAY) ,cluster, service, schedule)
   if status ==  False:
     return -1
 
