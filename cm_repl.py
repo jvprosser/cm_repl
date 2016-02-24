@@ -25,6 +25,7 @@ Options:
  --db [database name] database for hive backup
  --dry-run            do a dry run
  --status             get status
+ --follow [n secs]    every n seconds, print the status of this job
  --path [path (excluding hdfs://....)] for HDFS backup
  --list               list replication schedules accessable by this user/group
 
@@ -570,7 +571,7 @@ def main(argv):
   # Argument parsing
   try:
     opts, args = getopt.getopt(argv[1:], '', #hD:t:sp:yl
-                               ['database=','table=','path=','help','status','follow','dry-run','list'])
+                               ['database=','table=','path=','help','status','follow=','dry-run','list'])
 
   except getopt.GetoptError, err:
     print >>sys.stderr, err
@@ -582,7 +583,7 @@ def main(argv):
 # the CM instance the utility will talk to in order to trigger replications.
 # if failing back, this would be changed to CM_PRIMARY
   cmHost   = CM_DRSITE 
-
+  followPeriod = int(STATUS_POLL_DELAY)
   action   = 'doBackup'
   database = None
   table    = None
@@ -604,6 +605,7 @@ def main(argv):
       dryRun = True
     elif option in ('-f','--follow'):
       action='followStatus'
+      followPeriod = int(val)
     elif option in ('-s','--status'):
       action='getStatus'
     elif option in ('-k','--list'):
@@ -714,7 +716,7 @@ def main(argv):
       return -1
     else:
       print >>sys.stdout, '\tStart polling for status' 
-      status = pollReplicationStatus(int(MAX_POLLING_RETRIES), int(STATUS_POLL_DELAY) ,cluster, service, schedule)
+      status = pollReplicationStatus(int(MAX_POLLING_RETRIES), followPeriod ,cluster, service, schedule)
       if status ==  False:
         return -1
       return 0
