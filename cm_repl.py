@@ -396,7 +396,7 @@ def addHDFSSchedule(cluster,path):
 #
 # trigger a schedule item to run
 #
-def runSchedule(index,dryRun):
+def runSchedule(cluster,service,index,dryRun):
     bdrService =  cluster.get_service(service)
     res = bdrService.trigger_replication_schedule(index,dry_run=dryRun)
     return res
@@ -730,7 +730,7 @@ def main(argv):
   bdrId = schedule.id
 
   print >>sys.stdout, '\tScheduling run for id: ' + str(bdrId)
-  result = runSchedule(bdrId,dryRun)
+  result = runSchedule(cluster,service,bdrId,dryRun)
   schedule = getSchedule(cluster,service,bdrId) 
   print >>sys.stdout, '\tStart polling for status' 
   status = pollReplicationStatus(int(MAX_POLLING_RETRIES), int(STATUS_POLL_DELAY) ,cluster, service, schedule)
