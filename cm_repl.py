@@ -23,7 +23,7 @@ Usage: %s [options]
 Options:
  --help               help message
  --table [table name] table name for hive backup
- --db [database name] database for hive backup
+ --database [database name] database for hive backup
  --dry-run            do a dry run
  --status             get status
  --follow [n secs]    every n seconds, print the status of this job
@@ -67,7 +67,7 @@ Config.read(CONFIG_PATH)
 cm_section=Config.sections()[0]
 
 LOGLEVEL= Config.get(cm_section, 'log_level')
-DB_TEMPLATE_NAME= Config.get(cm_section, 'db_template_flag')
+DB_TEMPLATE_NAME= Config.get(cm_section, 'db_template_name')
 CM_USER	        = Config.get(cm_section, 'cm_user')
 CM_PASSWD	= Config.get(cm_section, 'cm_passwd')
 CM_PRIMARY	= Config.get(cm_section, 'cm_primary')	
@@ -77,8 +77,10 @@ CM_PEERNAME	= Config.get(cm_section, 'cm_peername')
 CLUSTER_NAME	= Config.get(cm_section, 'cluster_name')	
 HTTPFS_HOST	= Config.get(cm_section, 'httpfs_host')	
 HTTPFS_PORT	= Config.get(cm_section, 'httpfs_port')	
+HTTPFS_PROTO	= Config.get(cm_section, 'httpfs_proto')	
 WEBHCAT_HOST	= Config.get(cm_section, 'webhcat_host')	
 WEBHCAT_PORT	= Config.get(cm_section, 'webhcat_port')	
+WEBHCAT_PROTO	= Config.get(cm_section, 'webhcat_proto')	
 HDFS_SERVICE	= Config.get(cm_section, 'hdfs_service')	
 HIVE_SERVICE	= Config.get(cm_section, 'hive_service')	
 HIVE_AUTOCREATE	= Config.get(cm_section, 'hive_autocreate')	
@@ -112,7 +114,7 @@ def filterAccessablePaths(user,group,pathList):
   for p in pathList:
     # if we haven't checked this path yet
     if next((item for item in validList if item['path'] == p['path']), None) == None:
-      fsStatUrl = "https://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + p['path'] + "?op=GETFILESTATUS"
+      fsStatUrl = HTTPFS_PROTO+"://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + p['path'] + "?op=GETFILESTATUS"
       LOG.debug("Getting file status with: " + fsStatUrl)
   
       resp = fsOpener.open(fsStatUrl)
@@ -128,7 +130,7 @@ def filterAccessablePaths(user,group,pathList):
       if (pOwner == user and perms[0] in ['7','3','2'] ) or (pGroup == group and perms[1] in ['7','3','2']) :
         validList.append(p)
       else:
-        fsAclUrl = "https://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + p['path'] + "?op=GETACLSTATUS"
+        fsAclUrl = HTTPFS_PROTO+"://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + p['path'] + "?op=GETACLSTATUS"
         LOG.debug("Getting ACLS with: " + fsAclUrl)
         resp = fsOpener.open(fsAclUrl)
         aclData = json.load(resp)
@@ -156,7 +158,7 @@ def filterAccessablePaths(user,group,pathList):
 # get location of db from hive metastore via REST
 #
 def getDatabaseLocation(database):
-  getReplUrl = "http://" + WEBHCAT_HOST + ":" + WEBHCAT_PORT + "/templeton/v1/ddl/database/" + database + "/"
+  getReplUrl = WEBHCAT_PROTO+"://" + WEBHCAT_HOST + ":" + WEBHCAT_PORT + "/templeton/v1/ddl/database/" + database + "/"
 
   LOG.debug( "Polling WebHCat URL: " + getReplUrl )
   opener = urllib2.build_opener()
@@ -329,7 +331,7 @@ def addHiveSchedule(cluster,database,table):
     intervalUnit='DAY'
     res = hiveService.create_replication_schedule(
         nowDateTime, nowDateTime + yearFromNow, intervalUnit, interval, paused, hiveReplArgs,
-        alert_on_start=True, alert_on_success=False, alert_on_fail=True,
+        alert_on_start=True, alert_on_success=False, alert_on_fail=True, # remove these
         alert_on_abort=True)
 
     return res
@@ -414,7 +416,7 @@ def runSchedule(cluster,service,index,dryRun):
 def getAccessPriv(user,group,path):
   isOK=False
 
-  getReplUrl = "https://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + path + "?op=GETFILESTATUS"
+  getReplUrl = HTTPFS_PROTO+"://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + path + "?op=GETFILESTATUS"
   LOG.debug("Getting file status with: " + getReplUrl)
   opener = urllib2.build_opener()
   opener.add_handler(ul2k.HTTPKerberosAuthHandler())
@@ -431,7 +433,7 @@ def getAccessPriv(user,group,path):
   if (pOwner == user and perms[0] in ['7','3','2'] ) or (pGroup == group and perms[0] in ['7','3','2']) :
     isOK=True
   else:
-    getReplUrl = "https://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + path + "?op=GETACLSTATUS"
+    getReplUrl = HTTPFS_PROTO+"://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + path + "?op=GETACLSTATUS"
     LOG.debug("Getting ACLS with: " + getReplUrl)
     opener = urllib2.build_opener()
     opener.add_handler(ul2k.HTTPKerberosAuthHandler())
@@ -542,8 +544,8 @@ def setup_logging(level):
     procUser = getUsername()
     pid = os.getpid()
     tsString=datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-#    logging.basicConfig(filename='/tmp/' + procUser + '-' + tsString+ '-' + str(pid) + '-bdractivity.log')
-    logging.basicConfig()
+    logging.basicConfig(filename='/tmp/' + procUser + '-' + tsString+ '-' + str(pid) + '-bdractivity.log')
+#    logging.basicConfig()
   else :
     level = logging.INFO
     logging.basicConfig()
