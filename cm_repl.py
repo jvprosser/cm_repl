@@ -17,6 +17,7 @@
 
 
 """
+Command line interface to create, launch, and check the status of BDR replications.
 Usage: %s [options]
 
 Options:
@@ -58,7 +59,7 @@ import ConfigParser
 
 #
 # Customize this path
-#
+# 
 CONFIG_PATH='../cm_repl.ini'
 
 Config = ConfigParser.ConfigParser()
@@ -72,6 +73,7 @@ CM_PASSWD	= Config.get(cm_section, 'cm_passwd')
 CM_PRIMARY	= Config.get(cm_section, 'cm_primary')	
 CM_DRSITE	= Config.get(cm_section, 'cm_drsite')	
 CM_PORT	        = Config.get(cm_section, 'cm_port')	
+CM_PEERNAME	= Config.get(cm_section, 'cm_peername')	
 CLUSTER_NAME	= Config.get(cm_section, 'cluster_name')	
 HTTPFS_HOST	= Config.get(cm_section, 'httpfs_host')	
 HTTPFS_PORT	= Config.get(cm_section, 'httpfs_port')	
@@ -103,6 +105,8 @@ def filterAccessablePaths(user,group,pathList):
 
   fsOpener = urllib2.build_opener()
   fsOpener.add_handler(ul2k.HTTPKerberosAuthHandler())
+
+  # cache of paths we've checked, so we don't check them twice.
   validList=[]
 
   for p in pathList:
@@ -131,7 +135,7 @@ def filterAccessablePaths(user,group,pathList):
     
         output_json = json.dumps(aclData)
         LOG.debug( "HTTPFS ACL OUTPUT: " + output_json)
-        # get acls
+        # get acls, build a regexp for our group. Sentry acl's will be on the group
         entryList = aclData['AclStatus']['entries']
         pattern='.*:'+group+':'
         xpat=re.compile(pattern)
@@ -148,11 +152,10 @@ def filterAccessablePaths(user,group,pathList):
   return validList
 
 #
-# curl --negotiate -u : -b ~/cookiejar.txt -c ~/cookiejar.txt  http://jvp1-2.vpc.cloudera.com:50111/templeton/v1/ddl/database/?user.name=hive
-# get location of db from hive metatsore
+# curl --negotiate -u : -b ~/cookiejar.txt -c ~/cookiejar.txt  http://FQDN:50111/templeton/v1/ddl/database/?user.name=hive
+# get location of db from hive metastore via REST
 #
 def getDatabaseLocation(database):
-#  getReplUrl = "http://jvp1-2.vpc.cloudera.com:" + WEBHCAT_PORT + "/templeton/v1/ddl/database/?user.name=hive"
   getReplUrl = "http://" + WEBHCAT_HOST + ":" + WEBHCAT_PORT + "/templeton/v1/ddl/database/" + database + "/"
 
   LOG.debug( "Polling WebHCat URL: " + getReplUrl )
@@ -163,7 +166,7 @@ def getDatabaseLocation(database):
 
   data = json.load(resp)   
   output_json = json.dumps(data)
-# {"owner": "hive", "ownerType": "USER", "location": "hdfs://jvp1-2.vpc.cloudera.com:8020/user/hive/warehouse/ilimisp01_eciw.db", "database": "ilimisp01_eciw"}
+# {"owner": "hive", "ownerType": "USER", "location": "hdfs://FQDN:8020/user/hive/warehouse/ilimisp01_eciw.db", "database": "ilimisp01_eciw"}
 
   LOG.debug( "WEBHCat output: " + output_json )
   ( url,path)  = re.split(r':[0-9][0-9]+(?=.*)', data['location'])
@@ -352,7 +355,7 @@ def addHDFSSchedule(cluster,path):
     yearFromNow = datetime.timedelta(weeks=+52)
 
     hdfsReplConf = {"interval": 0,"hdfsArguments":{
-      'sourceService'            : {'clusterName': 'cluster', 'serviceName': HDFS_SERVICE, 'peerName': 'JVP1'},
+      'sourceService'            : {'clusterName': 'cluster', 'serviceName': HDFS_SERVICE, 'peerName': CM_PEERNAME},
       'sourcePath'               : path,
       'destinationPath'          : path,
       'mapreduceServiceName'     : 'yarn',
@@ -371,7 +374,7 @@ def addHDFSSchedule(cluster,path):
 
     hdfsReplArgs = ApiHdfsReplicationArguments(hdfsReplConf)
 
-    hdfsReplArgs.sourceService            = {'clusterName': 'cluster', 'serviceName': HDFS_SERVICE, 'peerName': 'JVP1'}
+    hdfsReplArgs.sourceService            = {'clusterName': 'cluster', 'serviceName': HDFS_SERVICE, 'peerName': CM_PEERNAME}
     hdfsReplArgs.sourcePath               = path
     hdfsReplArgs.destinationPath          = path
     hdfsReplArgs.mapreduceServiceName     = 'yarn'
