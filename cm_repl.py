@@ -46,11 +46,11 @@ import time
 import datetime
 from datetime import timedelta
 from cm_api.api_client import ApiResource
-import cm_api.endpoints.services 
+import cm_api.endpoints.services
 from cm_api.endpoints.types import ApiHiveReplicationArguments,ApiHdfsReplicationArguments
 import urllib2
 import base64
-import json 
+import json
 sys.path.append('/usr/lib64/cmf/agent/build/env/lib/python2.7/site-packages/kerberos-1.1.1-py2.7-linux-x86_64.egg/')
 sys.path.append('/usr/lib64/cmf/agent/build/env/lib/python2.7/site-packages/urllib2_kerberos-0.1.6-py2.7.egg/')
 import kerberos as k
@@ -59,7 +59,7 @@ import ConfigParser
 
 #
 # Customize this path
-# 
+#
 CONFIG_PATH='../cm_repl.ini'
 
 Config = ConfigParser.ConfigParser()
@@ -71,24 +71,23 @@ DB_TEMPLATE_NAME= Config.get(cm_section, 'db_template_name')
 CM_VERSION	= Config.get(cm_section, 'cm_version')
 CM_USER	        = Config.get(cm_section, 'cm_user')
 CM_PASSWD	= Config.get(cm_section, 'cm_passwd')
-CM_PRIMARY	= Config.get(cm_section, 'cm_primary')	
-CM_DRSITE	= Config.get(cm_section, 'cm_drsite')	
-CM_PORT	        = Config.get(cm_section, 'cm_port')	
-CM_PEERNAME	= Config.get(cm_section, 'cm_peername')	
-CLUSTER_NAME	= Config.get(cm_section, 'cluster_name')	
-HTTPFS_HOST	= Config.get(cm_section, 'httpfs_host')	
-HTTPFS_PORT	= Config.get(cm_section, 'httpfs_port')	
-HTTPFS_PROTO	= Config.get(cm_section, 'httpfs_proto')	
-WEBHCAT_HOST	= Config.get(cm_section, 'webhcat_host')	
-WEBHCAT_PORT	= Config.get(cm_section, 'webhcat_port')	
-WEBHCAT_PROTO	= Config.get(cm_section, 'webhcat_proto')	
-HDFS_SERVICE	= Config.get(cm_section, 'hdfs_service')	
-HIVE_SERVICE	= Config.get(cm_section, 'hive_service')	
-HIVE_AUTOCREATE	= Config.get(cm_section, 'hive_autocreate')	
-HDFS_AUTOCREATE	= Config.get(cm_section, 'hdfs_autocreate')	
-MAX_POLLING_RETRIES = Config.get(cm_section, 'max_polling_retries')	
-STATUS_POLL_DELAY   = Config.get(cm_section, 'status_poll_delay')	
-
+CM_PRIMARY	= Config.get(cm_section, 'cm_primary')
+CM_DRSITE	= Config.get(cm_section, 'cm_drsite')
+CM_PORT	        = Config.get(cm_section, 'cm_port')
+CM_PEERNAME	= Config.get(cm_section, 'cm_peername')
+CLUSTER_NAME	= Config.get(cm_section, 'cluster_name')
+HTTPFS_HOST	= Config.get(cm_section, 'httpfs_host')
+HTTPFS_PORT	= Config.get(cm_section, 'httpfs_port')
+HTTPFS_PROTO	= Config.get(cm_section, 'httpfs_proto')
+WEBHCAT_HOST	= Config.get(cm_section, 'webhcat_host')
+WEBHCAT_PORT	= Config.get(cm_section, 'webhcat_port')
+WEBHCAT_PROTO	= Config.get(cm_section, 'webhcat_proto')
+HDFS_SERVICE	= Config.get(cm_section, 'hdfs_service')
+HIVE_SERVICE	= Config.get(cm_section, 'hive_service')
+HIVE_AUTOCREATE	= Config.get(cm_section, 'hive_autocreate')
+HDFS_AUTOCREATE	= Config.get(cm_section, 'hdfs_autocreate')
+MAX_POLLING_RETRIES = Config.get(cm_section, 'max_polling_retries')
+STATUS_POLL_DELAY   = Config.get(cm_section, 'status_poll_delay')
 
 def getUsername():
   """ get effective userid from process """
@@ -123,20 +122,21 @@ def filterAccessablePaths(user,groupList,pathList):
        next((item for item in notValidList if item['path'] == p['path']), None) == None:
 
       trimmedPath = re.sub('\*', '', p['path'])
+      trimmedPath = re.sub('^ +', '', trimmedPath)
       LOG.debug("Getting file status for path: " + trimmedPath)
 
       fsStatUrl = HTTPFS_PROTO+"://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + trimmedPath + "?op=GETFILESTATUS"
       LOG.debug("Getting file status with: " + fsStatUrl)
-  
+
       resp = fsOpener.open(fsStatUrl)
-      fsData = json.load(resp)   
+      fsData = json.load(resp)
       output_json = json.dumps(fsData)
       LOG.debug( "HTTPFS OUTPUT: " + output_json)
-  
+
       pOwner=fsData['FileStatus']['owner']
       pGroup=fsData['FileStatus']['group']
       perms=fsData['FileStatus']['permission']
-  
+
       # if the owner or group has write privs
       if (pOwner == user and perms[0] in ['7','3','2'] ) or (pGroup in groupList and perms[1] in ['7','3','2']) :
         validList.append(p)
@@ -145,7 +145,7 @@ def filterAccessablePaths(user,groupList,pathList):
         LOG.debug("Getting ACLS with: " + fsAclUrl)
         resp = fsOpener.open(fsAclUrl)
         aclData = json.load(resp)
-    
+
         output_json = json.dumps(aclData)
         LOG.debug( "HTTPFS ACL OUTPUT: " + output_json)
         # get acls, build a regexp for our group. Sentry acl's will be on the group
@@ -190,7 +190,7 @@ def getDatabaseLocation(database):
 
   resp = opener.open(getReplUrl)
 
-  data = json.load(resp)   
+  data = json.load(resp)
   output_json = json.dumps(data)
 # if no HA
 # {"owner": "hive", "ownerType": "USER", "location": "hdfs://FQDN:8020/user/hive/warehouse/ilimisp01_eciw.db", "database": "ilimisp01_eciw"}
@@ -211,10 +211,10 @@ def pollReplicationStatus(tries, delay,cluster,service,schedule,verbose):
     backoff = 0
     time.sleep(mdelay)
     for n in range(tries):
-      schedule = getSchedule(cluster,service,schedule.id) 
+      schedule = getSchedule(cluster,service,schedule.id)
       LOG.debug("schedule was " + str(schedule.__dict__))
       LOG.debug("schedule first history  was " + str(schedule.history[0].__dict__))
-      active = getScheduleStatus(schedule) 
+      active = getScheduleStatus(schedule)
       LOG.debug("Status was " + str(active))
       if active == None or active == True:
         polling_time = time.strftime('%a, %d %b %Y %H:%M:%S', time.localtime())
@@ -236,7 +236,7 @@ def pollReplicationStatus(tries, delay,cluster,service,schedule,verbose):
 
 #
 # get the current activity status of this schedule item
-# Data for 25. is {'canRetry': None, 'hdfsResult': None, 'name': u'HiveReplicationCommand', 'parent': None, '_resource_root': <cm_api.api_client.ApiResource object 
+# Data for 25. is {'canRetry': None, 'hdfsResult': None, 'name': u'HiveReplicationCommand', 'parent': None, '_resource_root': <cm_api.api_client.ApiResource object
 # 0xc8cf10>, 'children': <cm_api.endpoints.types.ApiList object at 0xe1c790>, 'success': None, 'serviceRef': <cm_api.endpoints.types.ApiServiceRef object at 0xe1c710
 # , 'resultMessage': None, 'roleRef': None, 'resultDataUrl': u'/cmf/command/1186/download', 'clusterRef': None, 'startTime': datetime.datetime(2016, 2, 11, 17, 51, 26
 # , 219000), 'hiveResult': <cm_api.endpoints.types.ApiHiveReplicationResult object at 0xe1c7d0>, 'active': True, 'endTime': None, 'id': 1186, 'hostRef': None} .
@@ -270,7 +270,7 @@ def printScheduleLastResult (service,schedule) :
       if schedule.history[0].resultMessage != None:
         print >>sys.stdout,  '\n\tFinal Result Message: ' +  schedule.history[0].resultMessage
       else:
-        print >>sys.stdout,  '\n\tFinal Result Message: No Message Provided' 
+        print >>sys.stdout,  '\n\tFinal Result Message: No Message Provided'
     else:
       if schedule.history[0].hdfsResult != None:
         printHdfsResults(schedule.history[0].hdfsResult,True)
@@ -295,12 +295,12 @@ def  printReplicationSchedules(schedules):
     print >>sys.stdout,  '-------------------------------------------------------------------------------------------------'
     for x in sortedSchedules :
       if x['service'] == HIVE_SERVICE and x['schedule'].hiveArguments.tableFilters[0].tableName != DB_TEMPLATE_NAME:
-        print >>sys.stdout, '\tType: ' + x['service'] + '\tID: ' + str(x['schedule'].id) + '\tDatabase: ' + \
-                 x['schedule'].hiveArguments.tableFilters[0].database + '\tTable: ' + \
-                 x['schedule'].hiveArguments.tableFilters[0].tableName
+        print >>sys.stdout, '\tType: ' + x['service'] + '\tID: ' + str(x['schedule'].id) + '\tDatabase: ' + '\'' + \
+                 x['schedule'].hiveArguments.tableFilters[0].database +  '\'' +  '\tTable: ' +  '\'' + \
+                 x['schedule'].hiveArguments.tableFilters[0].tableName  + '\''
       elif x['service'] == HDFS_SERVICE:
-        print >>sys.stdout,'\tType: ' + x['service'] + '\tID: ' + str(x['schedule'].id) + '\tPath: ' + x['path']
-    # end for                                                                                                                                                                                            
+        print >>sys.stdout,'\tType: ' + x['service'] + '\tID: ' + str(x['schedule'].id) + '\tPath: ' +  '\'' + x['path'] + '\''
+    # end for
     print >>sys.stdout,  '\n'
   else:
     print >>sys.stdout, '\n\tNo replications found.'
@@ -308,7 +308,6 @@ def  printReplicationSchedules(schedules):
 def printHdfsResults(result,printDetails):
   print >>sys.stdout,  '\n\n\tHdfs Replication Result'
   print >>sys.stdout,  '-------------------------------------------------------------------------------------------------'
-  print >>sys.stdout,  ''
 
   print >>sys.stdout,  'numBytesCopied      : ' + str(result.numBytesCopied     )
   print >>sys.stdout,  'numBytesCopyFailed  : ' + str(result.numBytesCopyFailed )
@@ -329,7 +328,7 @@ def printHiveResults(result,printDetails):
     print >>sys.stdout,  'Tables'
     for r in result.tables:
       print >>sys.stdout,  r
-    
+
   if result.errorCount > 0:
     print >>sys.stdout,  'Errors: '
     for r in result.errors:
@@ -344,11 +343,11 @@ def printHiveResults(result,printDetails):
     print >>sys.stdout,  'numFilesDeleted     : ' + str(result.dataReplicationResult.numFilesDeleted    )
     print >>sys.stdout,  'progress            : ' + str(result.dataReplicationResult.progress    )
     print >>sys.stdout,  'jobdetails          : ' + str(result.dataReplicationResult.jobDetailsUri    )
-    
+
     if printDetails == True and result.dataReplicationResult.counters != None:
       for r in result.dataReplicationResult.counters:
         print >>sys.stdout,  r['group'] +': ' + r['name'] + ' = ' + str(r['value'])
-    
+
 #
 # create a hive BDR schedule instance
 #
@@ -368,7 +367,7 @@ def addHiveSchedule(cluster,database,table):
     res = hiveService.create_replication_schedule(
       nowDateTime, nowDateTime + yearFromNow, intervalUnit, interval, paused, hiveReplArgs)
   return res
-    
+
 
 #
 # create a HDFS BDR schedule instance
@@ -384,13 +383,13 @@ def addHDFSSchedule(cluster,path):
       'destinationPath'          : path,
       'mapreduceServiceName'     : 'yarn',
       'userName'                 : 'hdfs',
-      'dryRun'                   : 'false', 
+      'dryRun'                   : 'false',
       'abortOnError'             : 'true',
       'preservePermissions'      : 'true',
-      'skipChecksumChecks'       : 'false', 
-      'preserveXAttrs'           :  True, 
-      'exclusionFilters'         : [], 
-      'skipTrash'                : False, 
+      'skipChecksumChecks'       : 'false',
+      'preserveXAttrs'           :  True,
+      'exclusionFilters'         : [],
+      'skipTrash'                : False,
       'preserveBlockSize'        : True,
       'removeMissingFiles'       : False,
       'replicationStrategy'      : 'DYNAMIC',
@@ -436,16 +435,16 @@ def runSchedule(cluster,service,index,dryRun):
 
 
 
-# {"AclStatus": {"owner": "hive", "stickyBit": false, "group": "hive", "entries": 
+# {"AclStatus": {"owner": "hive", "stickyBit": false, "group": "hive", "entries":
 #     ["user:hive:rwx", "group:jprosser:rwx", "group::---", "group:hive:rwx"]}}
-# {"FileStatus": {"aclBit": true, "group": "hive", "permission": "771", "blockSize": 0, 
-# "accessTime": 0, "pathSuffix": "", "modificationTime": 1453998161924, "replication": 0, 
+# {"FileStatus": {"aclBit": true, "group": "hive", "permission": "771", "blockSize": 0,
+# "accessTime": 0, "pathSuffix": "", "modificationTime": 1453998161924, "replication": 0,
 # "length": 0, "owner": "hive", "type": "DIRECTORY"}}
 #
-# determine if the user is either the owner of the path or has user/group write perms in the acls 
+# determine if the user is either the owner of the path or has user/group write perms in the acls
 #
 
-  
+
 def getAccessPriv(user,groupList,path):
   isOK=False
 
@@ -454,7 +453,7 @@ def getAccessPriv(user,groupList,path):
   opener = urllib2.build_opener()
   opener.add_handler(ul2k.HTTPKerberosAuthHandler())
   resp = opener.open(getReplUrl)
-  fsData = json.load(resp)   
+  fsData = json.load(resp)
   output_json = json.dumps(fsData)
   LOG.debug( "HTTPFS OUTPUT: " + output_json)
 
@@ -471,8 +470,8 @@ def getAccessPriv(user,groupList,path):
     opener = urllib2.build_opener()
     opener.add_handler(ul2k.HTTPKerberosAuthHandler())
     resp = opener.open(getReplUrl)
-    aclData = json.load(resp)   
-  
+    aclData = json.load(resp)
+
     output_json = json.dumps(aclData)
     LOG.debug( "HTTPFS ACL OUTPUT: " + output_json)
     # get acls
@@ -495,11 +494,11 @@ def getAccessableSchedules(cluster,procUser,groupList):
   pathList=[]
   hiveService =  cluster.get_service(HIVE_SERVICE)
   hiveSchedules=hiveService.get_replication_schedules()
-  
+
   databases = {} # dict of dbname/dbpath so we don't call webhcat repeatedly for the same db
   for x in hiveSchedules:
     db = x.hiveArguments.tableFilters[0].database
-    
+
     # have we already gotten the location for this db from webhcat?
     if db not in databases:
       dbLoc = getDatabaseLocation(db)
@@ -507,7 +506,7 @@ def getAccessableSchedules(cluster,procUser,groupList):
     else:
       dbLoc = databases[db]
     pathList.append( {'schedule': x, 'service': HIVE_SERVICE,'path': dbLoc} )
- 
+
   hdfsService =  cluster.get_service(HDFS_SERVICE)
   hdfsSchedules=hdfsService.get_replication_schedules()
   for x in hdfsSchedules:
@@ -528,9 +527,9 @@ def getAccessableSchedules(cluster,procUser,groupList):
 def getHiveSchedule (cluster,service,database,table) :
     hiveService =  cluster.get_service("hive")
     schedules=hiveService.get_replication_schedules()
-    
-    output_dict = [x for x in schedules if x.hiveArguments.tableFilters[0].database  == database and 
-                   x.hiveArguments.tableFilters[0].tableName == table] 
+
+    output_dict = [x for x in schedules if x.hiveArguments.tableFilters[0].database  == database and
+                   x.hiveArguments.tableFilters[0].tableName == table]
 
     if len(output_dict) == 0:
         return None
@@ -609,7 +608,7 @@ def main(argv):
   dryRun   = False
 # the CM instance the utility will talk to in order to trigger replications.
 # if failing back, this would be changed to CM_PRIMARY
-  cmHost   = CM_DRSITE 
+  cmHost   = CM_DRSITE
   followPeriod = int(STATUS_POLL_DELAY)
   action   = 'doBackup'
   database = None
@@ -717,14 +716,14 @@ def main(argv):
   if service == HIVE_SERVICE:
     path = getDatabaseLocation(database)
     LOG.debug('DB location is ' + path)
-    schedule = getHiveSchedule (cluster,service,database,table) 
+    schedule = getHiveSchedule (cluster,service,database,table)
   else:
-    schedule = getHdfsSchedule (cluster,service,path) 
+    schedule = getHdfsSchedule (cluster,service,path)
 
 # check access privs and abort if none
-  validPath=filterAccessablePaths(procUser,procUserGroups,[{'schedule': schedule, 'service': HIVE_SERVICE,'path':path}])
+  validPath=filterAccessablePaths(procUser,procUserGroups,[{'schedule': schedule, 'service': service,'path':path}])
   if len(validPath) == 0 :
-    print >>sys.stderr, '\n\tInvalid privs or item does not exist.\n' 
+    print >>sys.stderr, '\n\tInvalid privs or item does not exist.\n'
     return -1
 
   if action == 'getStatus':
@@ -747,7 +746,7 @@ def main(argv):
       print >>sys.stderr, '\n\tNo replication schedule defined for this object. '
       return -1
     else:
-      print >>sys.stdout, '\tStart polling for status' 
+      print >>sys.stdout, '\tStart polling for status'
       verbose = True
       status = pollReplicationStatus(int(MAX_POLLING_RETRIES), followPeriod ,cluster, service, schedule,verbose)
       if status ==  False:
@@ -755,15 +754,16 @@ def main(argv):
       return 0
 
   if schedule == None:
-    if service == HIVE_SERVICE and HIVE_AUTOCREATE :
-      print >>sys.stdout, '\tAdding HIVE schedule with table name: ' + table 
+    if service == HIVE_SERVICE and HIVE_AUTOCREATE == True :
+      print >>sys.stdout, '\tAdding HIVE schedule with table name: ' + table
       result = addHiveSchedule( cluster, database, table )
       if result == None:
         print >>sys.stderr, '\n\tNo replication template defined for database.'
         return -1
       LOG.debug( 'Getting id for newly added schedule.')
-      schedule = getHiveSchedule (cluster,service,database,table) 
-    elif HDFS_AUTOCREATE :
+      schedule = getHiveSchedule (cluster,service,database,table)
+    elif HDFS_AUTOCREATE == True :
+      print >>sys.stdout, '\tAdding HDFS schedule with path: ' + path
       result = addHDFSSchedule(cluster,path)
       LOG.debug( 'Getting id for newly added schedule.')
       schedule = getHdfsSchedule (cluster,service,path)
@@ -775,9 +775,9 @@ def main(argv):
 
   print >>sys.stdout, '\tScheduling run for id: ' + str(bdrId)
   result = runSchedule(cluster,service,bdrId,dryRun)
-  schedule = getSchedule(cluster,service,bdrId) 
+  schedule = getSchedule(cluster,service,bdrId)
   if verbose == True:
-    print >>sys.stdout, '\tStart polling for status' 
+    print >>sys.stdout, '\tStart polling for status'
   status = pollReplicationStatus(int(MAX_POLLING_RETRIES), int(STATUS_POLL_DELAY) ,cluster, service, schedule,verbose)
   if status ==  False:
     return -1
