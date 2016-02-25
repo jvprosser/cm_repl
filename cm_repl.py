@@ -85,7 +85,8 @@ WEBHCAT_PROTO	= Config.get(cm_section, 'webhcat_proto')
 HDFS_SERVICE	= Config.get(cm_section, 'hdfs_service')
 HIVE_SERVICE	= Config.get(cm_section, 'hive_service')
 HIVE_AUTOCREATE	= Config.get(cm_section, 'hive_autocreate')
-HDFS_AUTOCREATE	= Config.get(cm_section, 'hdfs_autocreate')
+#HDFS_AUTOCREATE	= Config.get(cm_section, 'hdfs_autocreate')
+HDFS_AUTOCREATE	= False
 MAX_POLLING_RETRIES = Config.get(cm_section, 'max_polling_retries')
 STATUS_POLL_DELAY   = Config.get(cm_section, 'status_poll_delay')
 
