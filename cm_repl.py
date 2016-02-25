@@ -348,28 +348,22 @@ def printHiveResults(result,printDetails):
 # create a hive BDR schedule instance
 #
 def addHiveSchedule(cluster,database,table):
-
+  res = None
   # retrieve the database only job that we can use as a template.
-    dbSchedule = getHiveSchedule(cluster,HIVE_SERVICE,database, DB_TEMPLATE_NAME)
+  dbSchedule = getHiveSchedule(cluster,HIVE_SERVICE,database, DB_TEMPLATE_NAME)
+  if dbSchedule != None :
     nowDateTime= datetime.datetime.now()
     yearFromNow = datetime.timedelta(weeks=+52)
-
     hiveReplArgs = dbSchedule.hiveArguments
-
     hiveReplArgs.tableFilters = [{'tableName': table, 'database': database}]
-
     hiveService =  cluster.get_service(HIVE_SERVICE)
-
     paused=True
     interval=0
     intervalUnit='DAY'
     res = hiveService.create_replication_schedule(
-        nowDateTime, nowDateTime + yearFromNow, intervalUnit, interval, paused, hiveReplArgs,
-        alert_on_start=True, alert_on_success=False, alert_on_fail=True, # remove these
-        alert_on_abort=True)
-
-    return res
-
+      nowDateTime, nowDateTime + yearFromNow, intervalUnit, interval, paused, hiveReplArgs)
+  return res
+    
 
 #
 # create a HDFS BDR schedule instance
@@ -422,9 +416,7 @@ def addHDFSSchedule(cluster,path):
     interval=0
     intervalUnit='DAY'
     res = hdfsService.create_replication_schedule(
-        nowDateTime, nowDateTime + yearFromNow, intervalUnit, interval, paused, hdfsReplArgs,
-        alert_on_start=True, alert_on_success=False, alert_on_fail=True,
-        alert_on_abort=True)
+        nowDateTime, nowDateTime + yearFromNow, intervalUnit, interval, paused, hdfsReplArgs)
 
     return res
 
@@ -759,8 +751,11 @@ def main(argv):
 
   if schedule == None:
     if service == HIVE_SERVICE and HIVE_AUTOCREATE :
-      print >>sys.stdout, 'Adding HIVE schedule with table name: ' + table 
+      print >>sys.stdout, '\tAdding HIVE schedule with table name: ' + table 
       result = addHiveSchedule( cluster, database, table )
+      if result == None:
+        print >>sys.stderr, '\n\tNo replication template defined for database.'
+        return -1
       LOG.debug( 'Getting id for newly added schedule.')
       schedule = getHiveSchedule (cluster,service,database,table) 
     elif HDFS_AUTOCREATE :
