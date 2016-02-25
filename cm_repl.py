@@ -97,12 +97,17 @@ def getGroupname():
   """ get effective group from process """
   return grp.getgrgid(os.getgid()).gr_name
 
+def getUserGroups(user):
+  groups = [g.gr_name for g in grp.getgrall() if user in g.gr_mem]
+  gid = pwd.getpwnam(user).pw_gid
+  groups.append(grp.getgrgid(gid).gr_name)
+  return groups
 
 #
 # remove unaccessible schedule entries
 # user,group - string - names from linus
 # pathList - (scheduleItem,service,path) tuples
-def filterAccessablePaths(user,group,pathList):
+def filterAccessablePaths(user,groupList,pathList):
   isOK=False
 
   fsOpener = urllib2.build_opener()
@@ -110,11 +115,16 @@ def filterAccessablePaths(user,group,pathList):
 
   # cache of paths we've checked, so we don't check them twice.
   validList=[]
-
+  notValidList=[]
   for p in pathList:
     # if we haven't checked this path yet
-    if next((item for item in validList if item['path'] == p['path']), None) == None:
-      fsStatUrl = HTTPFS_PROTO+"://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + p['path'] + "?op=GETFILESTATUS"
+    if next((item for item in validList if item['path'] == p['path']), None) == None and \
+       next((item for item in notValidList if item['path'] == p['path']), None) == None:
+
+      trimmedPath = re.sub('\*', '', p['path'])
+      LOG.debug("Getting file status for path: " + trimmedPath)
+
+      fsStatUrl = HTTPFS_PROTO+"://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + trimmedPath + "?op=GETFILESTATUS"
       LOG.debug("Getting file status with: " + fsStatUrl)
   
       resp = fsOpener.open(fsStatUrl)
@@ -127,10 +137,10 @@ def filterAccessablePaths(user,group,pathList):
       perms=fsData['FileStatus']['permission']
   
       # if the owner or group has write privs
-      if (pOwner == user and perms[0] in ['7','3','2'] ) or (pGroup == group and perms[1] in ['7','3','2']) :
+      if (pOwner == user and perms[0] in ['7','3','2'] ) or (pGroup in groupList and perms[1] in ['7','3','2']) :
         validList.append(p)
       else:
-        fsAclUrl = HTTPFS_PROTO+"://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + p['path'] + "?op=GETACLSTATUS"
+        fsAclUrl = HTTPFS_PROTO+"://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + trimmedPath + "?op=GETACLSTATUS"
         LOG.debug("Getting ACLS with: " + fsAclUrl)
         resp = fsOpener.open(fsAclUrl)
         aclData = json.load(resp)
@@ -139,14 +149,25 @@ def filterAccessablePaths(user,group,pathList):
         LOG.debug( "HTTPFS ACL OUTPUT: " + output_json)
         # get acls, build a regexp for our group. Sentry acl's will be on the group
         entryList = aclData['AclStatus']['entries']
-        pattern='.*:'+group+':'
-        xpat=re.compile(pattern)
-        # look for this group in the ACLs and check for write access
-        sub_list = filter(xpat.match, entryList)
-        for f in sub_list:
-          (pcoll,name,priv) = f.split(':')
-          if 'w' in priv:
-            validList.append(p)
+        wasValid=False
+        for group in groupList:
+          LOG.debug( "Looking for group: " + group)
+          pattern='.*:'+group+':'
+          xpat=re.compile(pattern)
+          # look for this group in the ACLs and check for write access
+          sub_list = filter(xpat.match, entryList)
+
+          if len(sub_list) > 0 :
+            LOG.debug( "Got a hit for : " + group)
+            for f in sub_list:
+              (pcoll,name,priv) = f.split(':')
+              if 'w' in priv:
+                validList.append(p)
+                wasValid=True
+        #end for
+        if  wasValid==False: # group was in list, but had no privs, or wasn't in list
+          notValidList.append(p)
+
     else:
       validList.append(p)
     #end if
@@ -168,11 +189,15 @@ def getDatabaseLocation(database):
 
   data = json.load(resp)   
   output_json = json.dumps(data)
+# if no HA
 # {"owner": "hive", "ownerType": "USER", "location": "hdfs://FQDN:8020/user/hive/warehouse/ilimisp01_eciw.db", "database": "ilimisp01_eciw"}
+# if HA
+# {"owner": "hive", "ownerType": "USER", "location": "hdfs://namespace/user/hive/warehouse/ilimisp01_eciw.db", "database": "ilimisp01_eciw"}
 
   LOG.debug( "WEBHCat output: " + output_json )
-  ( url,path)  = re.split(r':[0-9][0-9]+(?=.*)', data['location'])
-  return path
+
+  parts=data['location'].split('/', 3 )
+  return '/'+parts[3]
 
 
 #
@@ -227,14 +252,16 @@ def printScheduleStatus (service,schedule) :
 def printScheduleLastResult (service,schedule) :
 
     if service==HIVE_SERVICE:
-      result = schedule.history[0].hiveResult
-      printHiveResults(result,True)
+      if schedule.history[0].hiveResult != None:
+        schedule.history[0].hiveResult
+        printHiveResults(schedule.history[0].hiveResult,True)
       if schedule.history[0].resultMessage != None:
         print >>sys.stdout,  '\n\tFinal Result Message: ' +  schedule.history[0].resultMessage
       else:
         print >>sys.stdout,  '\n\tFinal Result Message: No Message Provided' 
     else:
-      printHdfsResults(schedule.history[0].hdfsResult,True)
+      if schedule.history[0].hdfsResult != None:
+        printHdfsResults(schedule.history[0].hdfsResult,True)
 
     return schedule.history[0].success
 
@@ -413,7 +440,9 @@ def runSchedule(cluster,service,index,dryRun):
 #
 # determine if the user is either the owner of the path or has user/group write perms in the acls 
 #
-def getAccessPriv(user,group,path):
+
+  
+def getAccessPriv(user,groupList,path):
   isOK=False
 
   getReplUrl = HTTPFS_PROTO+"://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + path + "?op=GETFILESTATUS"
@@ -457,7 +486,7 @@ def getAccessPriv(user,group,path):
 #
 # get all the schedules that the process runner has file access to
 #
-def getAccessableSchedules(cluster,procUser,procGroup):
+def getAccessableSchedules(cluster,procUser,groupList):
   repls=[]
   pathList=[]
   hiveService =  cluster.get_service(HIVE_SERVICE)
@@ -485,7 +514,7 @@ def getAccessableSchedules(cluster,procUser,procGroup):
       pathList.append( {'schedule': x, 'service': HDFS_SERVICE,'path': sPath} )
 
   # returns the subset of (id,service,path) tuples that this user/group can write to.
-  accessableSchedules = filterAccessablePaths(procUser,procGroup,pathList)
+  accessableSchedules = filterAccessablePaths(procUser,groupList,pathList)
   return accessableSchedules
 
 
@@ -544,8 +573,8 @@ def setup_logging(level):
     procUser = getUsername()
     pid = os.getpid()
     tsString=datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    logging.basicConfig(filename='/tmp/' + procUser + '-' + tsString+ '-' + str(pid) + '-bdractivity.log')
-#    logging.basicConfig()
+#    logging.basicConfig(filename='/tmp/' + procUser + '-' + tsString+ '-' + str(pid) + '-bdractivity.log')
+    logging.basicConfig()
   else :
     level = logging.INFO
     logging.basicConfig()
@@ -667,12 +696,13 @@ def main(argv):
   LOG.debug('Process effective username is ' + procUser)
   procGroup= getGroupname()
   LOG.debug('Process effective group name is ' + procGroup)
-
+  procUserGroups = getUserGroups(procUser)
+  LOG.debug('All groups for user:' +  ', '.join(procUserGroups))
   cluster = API.get_cluster(CLUSTER_NAME)
 
   if action == 'listRepls':
-    print >>sys.stdout,  '\n\tSearching replication schedules for user: ' + procUser + ' group: ' + procGroup + '....'
-    schedules = getAccessableSchedules(cluster,procUser,procGroup)
+    print >>sys.stdout,  '\n\tSearching replication schedules for user: ' + procUser + ' group(s): ' + ', '.join(procUserGroups)
+    schedules = getAccessableSchedules(cluster,procUser,procUserGroups)
     printReplicationSchedules(schedules)
     return 0
 
@@ -685,7 +715,8 @@ def main(argv):
     schedule = getHdfsSchedule (cluster,service,path) 
 
 # check access privs and abort if none
-  if getAccessPriv(procUser,procGroup,path) == False:
+  validPath=filterAccessablePaths(procUser,procUserGroups,[{'path':path}])
+  if len(validPath) == 0 :
     print >>sys.stderr, '\n\tInvalid privs or item does not exist.\n' 
     return -1
 
