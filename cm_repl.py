@@ -68,6 +68,7 @@ cm_section=Config.sections()[0]
 
 LOGLEVEL= Config.get(cm_section, 'log_level')
 DB_TEMPLATE_NAME= Config.get(cm_section, 'db_template_name')
+CM_VERSION	= Config.get(cm_section, 'cm_version')
 CM_USER	        = Config.get(cm_section, 'cm_user')
 CM_PASSWD	= Config.get(cm_section, 'cm_passwd')
 CM_PRIMARY	= Config.get(cm_section, 'cm_primary')	
@@ -169,7 +170,9 @@ def filterAccessablePaths(user,groupList,pathList):
           notValidList.append(p)
 
     else:
-      validList.append(p)
+      # the item might be in the validList OR the notValidList, so we make sure it was in the validList
+      if next((item for item in validList if item['path'] == p['path']), None) != None :
+        validList.append(p)
     #end if
   # end for
   return validList
@@ -206,11 +209,14 @@ def getDatabaseLocation(database):
 def pollReplicationStatus(tries, delay,cluster,service,schedule,verbose):
     mdelay = float(delay) # make mutable float
     backoff = 0
+    time.sleep(mdelay)
     for n in range(tries):
       schedule = getSchedule(cluster,service,schedule.id) 
+      LOG.debug("schedule was " + str(schedule.__dict__))
+      LOG.debug("schedule first history  was " + str(schedule.history[0].__dict__))
       active = getScheduleStatus(schedule) 
       LOG.debug("Status was " + str(active))
-      if active == True:
+      if active == None or active == True:
         polling_time = time.strftime('%a, %d %b %Y %H:%M:%S', time.localtime())
         LOG.debug('{0}. Sleeping for {1} seconds.'.format(polling_time, mdelay))
         if verbose == True:
@@ -236,7 +242,10 @@ def pollReplicationStatus(tries, delay,cluster,service,schedule,verbose):
 # , 219000), 'hiveResult': <cm_api.endpoints.types.ApiHiveReplicationResult object at 0xe1c7d0>, 'active': True, 'endTime': None, 'id': 1186, 'hostRef': None} .
 
 def getScheduleStatus (schedule) :
+  if CM_VERSION == 11 :
     return schedule.active
+  else :
+    return schedule.history[0].active
 
 def printScheduleStatus (service,schedule) :
 
@@ -247,7 +256,7 @@ def printScheduleStatus (service,schedule) :
     if schedule.history[0].hiveResult != None:
       printHiveResults(schedule.history[0].hiveResult,False)
 
-    return schedule.active
+    return getScheduleStatus(schedule)
 
 
 #
@@ -257,7 +266,6 @@ def printScheduleLastResult (service,schedule) :
 
     if service==HIVE_SERVICE:
       if schedule.history[0].hiveResult != None:
-        schedule.history[0].hiveResult
         printHiveResults(schedule.history[0].hiveResult,True)
       if schedule.history[0].resultMessage != None:
         print >>sys.stdout,  '\n\tFinal Result Message: ' +  schedule.history[0].resultMessage
@@ -310,15 +318,14 @@ def printHdfsResults(result,printDetails):
   print >>sys.stdout,  'progress            : ' + str(result.progress    )
   print >>sys.stdout,  'jobdetails          : ' + str(result.jobDetailsUri    )
 
-  if printDetails == True:
+  if printDetails == True and result.counters != None:
     for r in result.counters:
       print >>sys.stdout,  r['group'] +': ' + r['name'] + ' = ' + str(r['value'])
 
 def printHiveResults(result,printDetails):
-  print >>sys.stdout,  '\n\n\tHive Replication Result'
+  print >>sys.stdout,  '\n\tHive Replication Result'
   print >>sys.stdout,  '-------------------------------------------------------------------------------------------------'
-  print >>sys.stdout,  ''
-  if result.tableCount > 0:
+  if result.tables != None and result.tableCount > 0:
     print >>sys.stdout,  'Tables'
     for r in result.tables:
       print >>sys.stdout,  r
@@ -328,7 +335,6 @@ def printHiveResults(result,printDetails):
     for r in result.errors:
       print >>sys.stdout,  r
 
-  print >>sys.stdout,  '\n'
 
   if result.dataReplicationResult != None:
     print >>sys.stdout,  'numBytesCopied      : ' + str(result.dataReplicationResult.numBytesCopied     )
@@ -339,11 +345,10 @@ def printHiveResults(result,printDetails):
     print >>sys.stdout,  'progress            : ' + str(result.dataReplicationResult.progress    )
     print >>sys.stdout,  'jobdetails          : ' + str(result.dataReplicationResult.jobDetailsUri    )
     
-    if printDetails == True:
+    if printDetails == True and result.dataReplicationResult.counters != None:
       for r in result.dataReplicationResult.counters:
         print >>sys.stdout,  r['group'] +': ' + r['name'] + ' = ' + str(r['value'])
     
-
 #
 # create a hive BDR schedule instance
 #
@@ -691,7 +696,7 @@ def main(argv):
 #    return -1
 
 
-  API = ApiResource(cmHost, CM_PORT,  version=11, username=CM_USER, password=CM_PASSWD, use_tls=True)
+  API = ApiResource(cmHost, CM_PORT,  version=CM_VERSION, username=CM_USER, password=CM_PASSWD, use_tls=True)
   LOG.debug('Connected to CM host on ' + cmHost)
 
   procUser = getUsername()
@@ -717,7 +722,7 @@ def main(argv):
     schedule = getHdfsSchedule (cluster,service,path) 
 
 # check access privs and abort if none
-  validPath=filterAccessablePaths(procUser,procUserGroups,[{'path':path}])
+  validPath=filterAccessablePaths(procUser,procUserGroups,[{'schedule': schedule, 'service': HIVE_SERVICE,'path':path}])
   if len(validPath) == 0 :
     print >>sys.stderr, '\n\tInvalid privs or item does not exist.\n' 
     return -1
