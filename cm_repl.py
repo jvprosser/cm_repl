@@ -29,7 +29,7 @@ Options:
  --follow [n secs]    every n seconds, print the status of this job
  --path [path (excluding hdfs://....)] for HDFS backup
  --list               list replication schedules accessable by this user/group
-
+ --verbose            Print status update when triggering a replication
 """
 # OMITTED -c --active currently active site [RTP|OMAHA]
 
@@ -203,7 +203,7 @@ def getDatabaseLocation(database):
 #
 # poll CM until the action is completed or we run out of time.
 #
-def pollReplicationStatus(tries, delay,cluster,service,schedule):
+def pollReplicationStatus(tries, delay,cluster,service,schedule,verbose):
     mdelay = float(delay) # make mutable float
     backoff = 0
     for n in range(tries):
@@ -213,11 +213,15 @@ def pollReplicationStatus(tries, delay,cluster,service,schedule):
       if active == True:
         polling_time = time.strftime('%a, %d %b %Y %H:%M:%S', time.localtime())
         LOG.debug('{0}. Sleeping for {1} seconds.'.format(polling_time, mdelay))
-        printScheduleStatus (service,schedule)
+        if verbose == True:
+          printScheduleStatus (service,schedule)
         time.sleep(mdelay)
         mdelay += backoff
       else:
-        lastRes=printScheduleLastResult (service,schedule)
+        if verbose == True:
+          lastRes=printScheduleLastResult (service,schedule)
+        else :
+          lastRes = getScheduleLastResult (schedule)
         return lastRes
     # end of for loop
     return False
@@ -263,6 +267,9 @@ def printScheduleLastResult (service,schedule) :
       if schedule.history[0].hdfsResult != None:
         printHdfsResults(schedule.history[0].hdfsResult,True)
 
+    return schedule.history[0].success
+
+def getScheduleLastResult (schedule) :
     return schedule.history[0].success
 
 
@@ -594,7 +601,7 @@ def main(argv):
   # Argument parsing
   try:
     opts, args = getopt.getopt(argv[1:], '', #hD:t:sp:yl
-                               ['database=','table=','path=','help','status','follow=','dry-run','list'])
+                               ['database=','table=','path=','help','status','follow=','dry-run','list','verbose'])
 
   except getopt.GetoptError, err:
     print >>sys.stderr, err
@@ -611,6 +618,7 @@ def main(argv):
   database = None
   table    = None
   path     = None
+  verbose  = False
 
   for option, val in opts:
     LOG.debug( "option is " + option +" val is " + val)
@@ -626,6 +634,8 @@ def main(argv):
       table =  val
     elif option in ('-y','--dry-run'):
       dryRun = True
+    elif option in ('-y','--verbose'):
+      verbose = True
     elif option in ('-f','--follow'):
       action='followStatus'
       followPeriod = int(val)
@@ -741,7 +751,8 @@ def main(argv):
       return -1
     else:
       print >>sys.stdout, '\tStart polling for status' 
-      status = pollReplicationStatus(int(MAX_POLLING_RETRIES), followPeriod ,cluster, service, schedule)
+      verbose = True
+      status = pollReplicationStatus(int(MAX_POLLING_RETRIES), followPeriod ,cluster, service, schedule,verbose)
       if status ==  False:
         return -1
       return 0
@@ -765,8 +776,9 @@ def main(argv):
   print >>sys.stdout, '\tScheduling run for id: ' + str(bdrId)
   result = runSchedule(cluster,service,bdrId,dryRun)
   schedule = getSchedule(cluster,service,bdrId) 
-  print >>sys.stdout, '\tStart polling for status' 
-  status = pollReplicationStatus(int(MAX_POLLING_RETRIES), int(STATUS_POLL_DELAY) ,cluster, service, schedule)
+  if verbose == True:
+    print >>sys.stdout, '\tStart polling for status' 
+  status = pollReplicationStatus(int(MAX_POLLING_RETRIES), int(STATUS_POLL_DELAY) ,cluster, service, schedule,verbose)
   if status ==  False:
     return -1
 
