@@ -766,7 +766,7 @@ def main(argv):
       return 0
 
   if schedule == None:
-    if service == HIVE_SERVICE and HIVE_AUTOCREATE == True :
+    if service == HIVE_SERVICE and HIVE_AUTOCREATE == 'True' :
       print >>sys.stdout, '\tAdding HIVE schedule with table name: ' + table
       result = addHiveSchedule( cluster, database, table )
       if result == None:
@@ -774,13 +774,13 @@ def main(argv):
         return -1
       LOG.debug( 'Getting id for newly added schedule.')
       schedule = getHiveSchedule (cluster,service,database,table)
-    elif HDFS_AUTOCREATE == True :
+    elif HDFS_AUTOCREATE == 'True' :
       print >>sys.stdout, '\tAdding HDFS schedule with path: ' + path
       result = addHDFSSchedule(cluster,path)
       LOG.debug( 'Getting id for newly added schedule.')
       schedule = getHdfsSchedule (cluster,service,path)
     else:
-      print >>sys.stderr, '\n\tNo replication schedule defined for this object. '
+      print >>sys.stderr, '\n\tNo Replication schedule defined for this object. '
       return -1
 
   bdrId = schedule.id
