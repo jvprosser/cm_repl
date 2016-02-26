@@ -86,7 +86,7 @@ HDFS_SERVICE	= Config.get(cm_section, 'hdfs_service')
 HIVE_SERVICE	= Config.get(cm_section, 'hive_service')
 HIVE_AUTOCREATE	= Config.get(cm_section, 'hive_autocreate')
 #HDFS_AUTOCREATE	= Config.get(cm_section, 'hdfs_autocreate')
-HDFS_AUTOCREATE	= False
+HDFS_AUTOCREATE = False
 MAX_POLLING_RETRIES = Config.get(cm_section, 'max_polling_retries')
 STATUS_POLL_DELAY   = Config.get(cm_section, 'status_poll_delay')
 
@@ -136,7 +136,6 @@ def filterAccessablePaths(user,groupList,pathList):
         LOG.debug( "HTTPFS OUTPUT: " + output_json)
       except urllib2.HTTPError, e:
         print >>sys.stderr, '\n\tCould not check access for path \'' + trimmedPath + '\' Skipping...'
-
         notValidList.append(p)
         continue
 
@@ -200,15 +199,12 @@ def getDatabaseLocation(database):
   try:
     opener = urllib2.build_opener()
     opener.add_handler(ul2k.HTTPKerberosAuthHandler())
-
     resp = opener.open(getReplUrl)
-
   except urllib2.HTTPError, e:
     print >>sys.stderr, '\n\tCould not retrieve location for database \'' + database + '\' Skipping...'
 
     return None
   else :
-
     data = json.load(resp)
     output_json = json.dumps(data)
     LOG.debug( "WEBHCat output: " + output_json )
@@ -280,11 +276,9 @@ def printScheduleLastResult (service,schedule) :
     if service==HIVE_SERVICE:
       if schedule.history[0].hiveResult != None:
         printHiveResults(schedule.history[0].hiveResult,True)
-
     else:
       if schedule.history[0].hdfsResult != None:
         printHdfsResults(schedule.history[0].hdfsResult,True)
-
     if schedule.history[0].resultMessage != None:
       print >>sys.stdout,  '\n\tFinal Result Message: ' +  schedule.history[0].resultMessage
     else:
