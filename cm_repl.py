@@ -129,10 +129,16 @@ def filterAccessablePaths(user,groupList,pathList):
       fsStatUrl = HTTPFS_PROTO+"://"+HTTPFS_HOST + ":" + HTTPFS_PORT + "/webhdfs/v1" + trimmedPath + "?op=GETFILESTATUS"
       LOG.debug("Getting file status with: " + fsStatUrl)
 
-      resp = fsOpener.open(fsStatUrl)
-      fsData = json.load(resp)
-      output_json = json.dumps(fsData)
-      LOG.debug( "HTTPFS OUTPUT: " + output_json)
+      try:
+        resp = fsOpener.open(fsStatUrl)
+        fsData = json.load(resp)
+        output_json = json.dumps(fsData)
+        LOG.debug( "HTTPFS OUTPUT: " + output_json)
+      except urllib2.HTTPError, e:
+        print >>sys.stderr, '\n\tCould not check access for path \'' + trimmedPath + '\' Skipping...'
+
+        notValidList.append(p)
+        continue
 
       pOwner=fsData['FileStatus']['owner']
       pGroup=fsData['FileStatus']['group']
@@ -182,26 +188,32 @@ def filterAccessablePaths(user,groupList,pathList):
 # curl --negotiate -u : -b ~/cookiejar.txt -c ~/cookiejar.txt  http://FQDN:50111/templeton/v1/ddl/database/?user.name=hive
 # get location of db from hive metastore via REST
 #
-def getDatabaseLocation(database):
-  getReplUrl = WEBHCAT_PROTO+"://" + WEBHCAT_HOST + ":" + WEBHCAT_PORT + "/templeton/v1/ddl/database/" + database + "/"
-
-  LOG.debug( "Polling WebHCat URL: " + getReplUrl )
-  opener = urllib2.build_opener()
-  opener.add_handler(ul2k.HTTPKerberosAuthHandler())
-
-  resp = opener.open(getReplUrl)
-
-  data = json.load(resp)
-  output_json = json.dumps(data)
 # if no HA
 # {"owner": "hive", "ownerType": "USER", "location": "hdfs://FQDN:8020/user/hive/warehouse/ilimisp01_eciw.db", "database": "ilimisp01_eciw"}
 # if HA
 # {"owner": "hive", "ownerType": "USER", "location": "hdfs://namespace/user/hive/warehouse/ilimisp01_eciw.db", "database": "ilimisp01_eciw"}
 
-  LOG.debug( "WEBHCat output: " + output_json )
+def getDatabaseLocation(database):
+  getReplUrl = WEBHCAT_PROTO+"://" + WEBHCAT_HOST + ":" + WEBHCAT_PORT + "/templeton/v1/ddl/database/" + database + "/"
 
-  parts=data['location'].split('/', 3 )
-  return '/'+parts[3]
+  LOG.debug( "Polling WebHCat URL: " + getReplUrl )
+  try:
+    opener = urllib2.build_opener()
+    opener.add_handler(ul2k.HTTPKerberosAuthHandler())
+
+    resp = opener.open(getReplUrl)
+
+  except urllib2.HTTPError, e:
+    print >>sys.stderr, '\n\tCould not retrieve location for database \'' + database + '\' Skipping...'
+
+    return None
+  else :
+
+    data = json.load(resp)
+    output_json = json.dumps(data)
+    LOG.debug( "WEBHCat output: " + output_json )
+    parts=data['location'].split('/', 3 )
+    return '/'+parts[3]
 
 
 #
@@ -268,13 +280,15 @@ def printScheduleLastResult (service,schedule) :
     if service==HIVE_SERVICE:
       if schedule.history[0].hiveResult != None:
         printHiveResults(schedule.history[0].hiveResult,True)
-      if schedule.history[0].resultMessage != None:
-        print >>sys.stdout,  '\n\tFinal Result Message: ' +  schedule.history[0].resultMessage
-      else:
-        print >>sys.stdout,  '\n\tFinal Result Message: No Message Provided'
+
     else:
       if schedule.history[0].hdfsResult != None:
         printHdfsResults(schedule.history[0].hdfsResult,True)
+
+    if schedule.history[0].resultMessage != None:
+      print >>sys.stdout,  '\n\tFinal Result Message: ' +  schedule.history[0].resultMessage
+    else:
+      print >>sys.stdout,  '\n\tFinal Result Message: No Message Provided'
 
     return schedule.history[0].success
 
@@ -503,7 +517,10 @@ def getAccessableSchedules(cluster,procUser,groupList):
     # have we already gotten the location for this db from webhcat?
     if db not in databases:
       dbLoc = getDatabaseLocation(db)
-      databases[db] = dbLoc
+      if dbLoc != None:
+        databases[db] = dbLoc
+      else:
+        continue
     else:
       dbLoc = databases[db]
     pathList.append( {'schedule': x, 'service': HIVE_SERVICE,'path': dbLoc} )
