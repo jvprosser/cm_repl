@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/lib64/cmf/agent/build/env/bin/python
 # Licensed to Cloudera, Inc. under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -51,8 +51,8 @@ from cm_api.endpoints.types import ApiHiveReplicationArguments,ApiHdfsReplicatio
 import urllib2
 import base64
 import json
-sys.path.append('/usr/lib64/cmf/agent/build/env/lib/python2.7/site-packages/kerberos-1.1.1-py2.7-linux-x86_64.egg/')
-sys.path.append('/usr/lib64/cmf/agent/build/env/lib/python2.7/site-packages/urllib2_kerberos-0.1.6-py2.7.egg/')
+#sys.path.append('/usr/lib64/cmf/agent/build/env/lib/python2.7/site-packages/kerberos-1.1.1-py2.7-linux-x86_64.egg/')
+#sys.path.append('/usr/lib64/cmf/agent/build/env/lib/python2.7/site-packages/urllib2_kerberos-0.1.6-py2.7.egg/')
 import kerberos as k
 import urllib2_kerberos as ul2k
 import ConfigParser
