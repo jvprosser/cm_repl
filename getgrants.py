@@ -57,7 +57,15 @@ import cm_repl
 #
 # Customize this path
 #
-CONFIG_PATH='../cm_repl.ini'
+
+config_path_list=['/','h','o','m','e','/','j','p','r','o','s','s','e','r','/','c','m','_','r','e','p','l','.','i','n','i']
+CONFIG_PATH=''.join(config_path_list)
+
+nav_audit_user=['a','d','m','i','n']
+nav_audit_pass=['a','d','m','i','n']
+
+NAV_AUDIT_USER=''.join(nav_audit_user)
+NAV_AUDIT_PASS=''.join(nav_audit_pass)
 
 Config = ConfigParser.ConfigParser()
 Config.read(CONFIG_PATH)
@@ -161,7 +169,7 @@ def getNavData(proto,host,port,navType,query):
     # Add the username and password.
     # If we knew the realm, we could use it instead of None.
   
-    password_mgr.add_password(None, getReplUrl, "admin", "admin")
+    password_mgr.add_password(None, getReplUrl, NAV_AUDIT_USER, NAV_AUDIT_PASS)
     
     basicAuthHandler = urllib2.HTTPBasicAuthHandler(password_mgr)
   
@@ -181,13 +189,18 @@ def getNavData(proto,host,port,navType,query):
     return data
 
 
-def getSentryGrants(proto,host,port,db,table,start,end):
+def getSentryGrants(proto,host,port,user,db,table,start,end):
 
-    query = "service%3D%3Dsentry&database%3D%3D" + db + "&table_name%3D%3D" + table +  "&allowed%3D%3Dtrue&startfgTime="+start+ \
+
+  query="username%3D%3D{0}%3Ballowed%3D%3Dtrue%3Bservice%3D%3Dsentry&startTime={1}&endTime={2}&limit=100&offset=0&format=JSON&attachment=false".format(user,start,end)
+
+  oldquery = "service%3D%3Dsentry&database%3D%3D" + db + "&table_name%3D%3D" + table +   \
+            "&username%3D%3D" + user +\
+            "&allowed%3D%3Dtrue&startfgTime="+start+ \
             "&endTime="+end+"&limit=1001&offset=0&format=JSON&attachment=false"
-    data = getNavData(proto,host,port,"audits",query)
+  data = getNavData(proto,host,port,"audits",query)
 
-    return data
+  return data
 
 
 # ((type:database) and (originalName:default))
@@ -296,10 +309,11 @@ def main(argv):
 
   procUser = getUsername()
   LOG.debug('Process effective username is ' + procUser)
-  procGroup= getGroupname()
-  LOG.debug('Process effective group name is ' + procGroup)
-  procUserGroups = getUserGroups(procUser)
-  LOG.debug('All groups for user:' +  ', '.join(procUserGroups))
+#  procGroup= getGroupname()
+#  LOG.debug('Process effective group name is ' + procGroup)
+#  procUserGroups = getUserGroups(procUser)
+#  LOG.debug('All groups for user:' +  ', '.join(procUserGroups))
+
   cluster = API.get_cluster(CLUSTER_NAME)
 
 
@@ -334,17 +348,18 @@ def main(argv):
 
 
 # TODO: FILTER for allowed and success
-  prodSentry = getSentryGrants(prod_nav_proto,prod_nav_host,prod_nav_port,database,table,yearAgoEpoch,nowEpoch)
-  drSentry   = getSentryGrants(dr_nav_proto,dr_nav_host,dr_nav_port,database,table,yearAgoEpoch,nowEpoch)
+  prodSentry = getSentryGrants(prod_nav_proto,prod_nav_host,prod_nav_port,procUser,database,table,yearAgoEpoch,nowEpoch)
+  drSentry   = getSentryGrants(dr_nav_proto,dr_nav_host,dr_nav_port,procUser,database,table,yearAgoEpoch,nowEpoch)
 
-  LOG.debug( "\n\nNavigator BIG Prod output: " + str(prodSentry) )
 
  # convert to lowercase and remove extra whitespace
   prodSentryCommands= [{'sql': re.sub(r'\s+',' ',f['serviceValues']['operation_text'].lower()), 
-                        't':time.strptime(f['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')} for f in prodSentry if f['serviceValues'] ]
+                        't':time.strptime(f['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')} for f in prodSentry if f['serviceValues'] 
+                       and f['serviceValues']['database_name'] == database and f['serviceValues']['table_name'] == table ]
 
   drSentryCommands=   [{'sql': re.sub(r'\s+',' ',f['serviceValues']['operation_text'].lower()), 
-                        't':time.strptime(f['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')} for f in drSentry if f['serviceValues'] ]
+                        't':time.strptime(f['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')} for f in drSentry if f['serviceValues'] 
+                       and f['serviceValues']['database_name'] == database and f['serviceValues']['table_name'] == table ]
 
 
   # get more recent first
@@ -354,33 +369,42 @@ def main(argv):
   LOG.debug( "\n\nNavigator Prod output: " + str(prodSentryCommands) )
   LOG.debug( "\n\nNavigator DR output: " + str(drSentryCommands) )
 
-  finalList=[]
-  firstProdMatchIndex = -1
-  firstDrMatchIndex = 0
-  prodIndex=0
+  startIndex=None
+  beeline_cmdList=""
   # first find where the first dr grant falls in the prod list
-  LOG.debug( "\n\ntrying to Match dr output: " + str(prodSentryCommands[firstDrMatchIndex]) )
-  if len(drSentryCommands)> 0 :
-      for f in prodSentryCommands :
-          LOG.debug( "\n\nworking ont: " + str(f) )          
-          match = next(index for (index, d) in enumerate(drSentryCommands) if d['sql'] == f['sql'])
-          LOG.debug( "match was t: " + str(match) )          
-          if match  != -1:
-              break
-          else:
-              prodIndex = prodIndex+1
+
+  gotMatch = False
+  for (index, f) in enumerate( prodSentryCommands ) :
+    LOG.debug( "\n\nworking on: " + str(f['sql']) )          
+    #match = next(index for (index, d) in enumerate(drSentryCommands) if d['sql'] == f['sql'])
+    startIndex  = index
+    for d in drSentryCommands :
+      if d['sql'] == f['sql'] :
+        LOG.debug( "Match was : " + f['sql'] )
+        LOG.debug( "Matching prod index was : " + str(index) )
+        gotMatch = True
+        break
+
+        # startIndex represents the first prod grant statement that is not in the DR audit trail.
+        # When we get a match, then we back up one.
+    if gotMatch == True:
+      startIndex -= 1 
+      break
+
+
+  LOG.debug( "Start index is : " + str(startIndex) )
+
+
+  while startIndex  >= 0:
+    beeline_cmdList+=(str(prodSentryCommands[startIndex]['sql']) + "; " )
+    startIndex -= 1
+
+  if beeline_cmdList != "":
+    fullBeelineCmd = "use " + database+";" + beeline_cmdList
+    LOG.debug( "\napplying this commmand: " + fullBeelineCmd)
+    call(["beeline", "-u", "'" + BEELINE_URL + "'", "-e",fullBeelineCmd])
   else:
-      LOG.debug( "\nlen drwas 0: " )
-      prodIndex = len(prodSentryCommands) -1
-
-  LOG.debug( "\nprodindx: " + str(prodIndex))
-  beeline_cmd=""
-  while prodIndex >= 0:
-      beeline_cmd+=(str(prodSentryCommands[prodIndex]['sql']) + "; " )
-      prodIndex = prodIndex - 1
-
-  LOG.debug( "\nappling this commmand: " + beeline_cmd)
-  call(["beeline", "-u", "'" + BEELINE_URL + "'", "-e",beeline_cmd])
+    LOG.debug( "\nSentry grants are in sync. " )
 
   return 0
 
