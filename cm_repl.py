@@ -51,8 +51,6 @@ from cm_api.endpoints.types import ApiHiveReplicationArguments,ApiHdfsReplicatio
 import urllib2
 import base64
 import json
-#sys.path.append('/usr/lib64/cmf/agent/build/env/lib/python2.7/site-packages/kerberos-1.1.1-py2.7-linux-x86_64.egg/')
-#sys.path.append('/usr/lib64/cmf/agent/build/env/lib/python2.7/site-packages/urllib2_kerberos-0.1.6-py2.7.egg/')
 import kerberos as k
 import urllib2_kerberos as ul2k
 import ConfigParser
@@ -60,7 +58,9 @@ import ConfigParser
 #
 # Customize this path
 #
-CONFIG_PATH='../cm_repl.ini'
+# hide the path
+config_path_list=['/','h','o','m','e','/','j','p','r','o','s','s','e','r','/','c','m','_','r','e','p','l','.','i','n','i']
+CONFIG_PATH=''.join(config_path_list)
 
 Config = ConfigParser.ConfigParser()
 Config.read(CONFIG_PATH)
@@ -338,7 +338,7 @@ def printHiveResults(result,printDetails):
     for r in result.tables:
       print >>sys.stdout,  r
 
-  if result.errorCount > 0:
+  if result.errors != None and result.errorCount > 0:
     print >>sys.stdout,  'Errors: '
     for r in result.errors:
       print >>sys.stdout,  r

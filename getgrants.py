@@ -35,13 +35,16 @@ import grp
 import re
 import logging
 import sys
+from subprocess import call
 import textwrap
 import time
 import datetime
 from datetime import timedelta
 from cm_api.api_client import ApiResource
 import cm_api.endpoints.services
-from cm_api.endpoints.types import ApiHiveReplicationArguments,ApiHdfsReplicationArguments
+
+from cm_api.endpoints.types import ApiHiveReplicationArguments,ApiHdfsReplicationArguments,ApiHiveReplicationResult,ApiHdfsReplicationResult
+
 import urllib2
 import base64
 import json
@@ -50,7 +53,7 @@ import json
 import kerberos as k
 import urllib2_kerberos as ul2k
 import ConfigParser
-
+import cm_repl
 #
 # Customize this path
 #
@@ -90,6 +93,7 @@ PROD_NAV_PORT    = Config.get(cm_section, 'prod_nav_port')
 DR_NAV_PROTO     = Config.get(cm_section, 'dr_nav_proto')    
 DR_NAV_HOST      = Config.get(cm_section, 'dr_nav_host')     
 DR_NAV_PORT      = Config.get(cm_section, 'dr_nav_port')     
+BEELINE_URL      = Config.get(cm_section, 'beeline_url')     
 
 
 def getUsername():
@@ -143,17 +147,14 @@ NAV_PROTO="https"
 #  
 #  https://jvp1-2.vpc.cloudera.com:7187/api/v8/audits/?query=service%3D%3Dsentry&startTime=1436456072000&endTime=1456761168000&limit=1001&offset=0&format=JSON&attachment=false
 
+#
 
-def getSentryGrants(proto,host,port,db,table,start,end):
-#  getReplUrl = NAV_PROTO+"://" + NAV_HOST + ":" + NAV_PORT + "/api/v8/entities/?query=((type:FIELD))"
-  getReplUrl = proto+"://" + host + ":" + port + "/api/v8/audits/?query=service%3D%3Dsentry&database%3D%3D" + db + "&table_name%3D%3D" + table +"&startTime="+start+\
-               "&endTime="+end+"&limit=1001&offset=0&format=JSON&attachment=false"
-#  getReplUrl = NAV_PROTO+"://" + NAV_HOST + ":" + NAV_PORT + "/api/v8/audits/?query=service%3D%3D*&startTime=1436456072000&endTime=1456761168000&limit=1001&offset=0&format=JSON&attachment=false"
+def getNavData(proto,host,port,navType,query):
 
-
-  LOG.debug( "Polling NAV URL: " + getReplUrl )
+  getReplUrl = proto+"://" + host + ":" + port + "/api/v8/"+navType +"/?query=" +  query
+  resp=None
+  LOG.debug( "Gettinging NAV URL: " + getReplUrl )
   try:
-  
     # create a password manager
     password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
     
@@ -178,6 +179,45 @@ def getSentryGrants(proto,host,port,db,table,start,end):
     output_json = json.dumps(data)
 
     return data
+
+
+def getSentryGrants(proto,host,port,db,table,start,end):
+
+    query = "service%3D%3Dsentry&database%3D%3D" + db + "&table_name%3D%3D" + table +  "&allowed%3D%3Dtrue&startfgTime="+start+ \
+            "&endTime="+end+"&limit=1001&offset=0&format=JSON&attachment=false"
+    data = getNavData(proto,host,port,"audits",query)
+
+    return data
+
+
+# ((type:database) and (originalName:default))
+#  ((type:table) and ("originalName":"household")  and ( "parentPath": "/ilimisp01_eciw" ) )
+#  ((type:table) and ("originalName":"household")  and ( "parentPath": "ilimisp01_eciw" ) )
+
+def buildNavQuery (db,table,file):
+
+    if table == "":
+        query = '((type:database)%20AND%20(originalName:"{0}"))'.format(db)
+    else :
+        query = '((parentPath:"/{0}")%20AND%20(originalName:"{1}")%20AND%20(type:table))'.format(db,table)
+
+    return query
+
+
+
+def getNavHiveEntity(proto,host,port,db,table):
+
+  query = buildNavQuery(db,table,None)
+  data = getNavData(proto,host,port,"entities",query)
+  LOG.debug( "FINAL HIVE ENTITY OUTPUT: " + str(data) )
+  return data
+
+def getNavHdfsEntity(proto,host,port,hdfspath):
+
+  query = buildNavQuery(None,None,hdfspath)
+  data = getNavData(proto,host,port,"entities",query)
+  return data
+
 
 
 LOG = logging.getLogger(__name__)
@@ -213,10 +253,66 @@ def main(argv):
     opts, args = getopt.getopt(argv[1:], '', #hD:t:sp:yl
                                ['database=','table=','path=','help','status','follow=','dry-run','list','verbose'])
 
+
   except getopt.GetoptError, err:
     print >>sys.stderr, err
     usage()
     return -1
+  cmHost   = CM_DRSITE
+  service="hive"
+
+
+  database = None
+  table    = None
+  path     = None
+  verbose  = False
+
+  for option, val in opts:
+    LOG.debug( "option is " + option +" val is " + val)
+    # i took the shortargs out of the options config, but left them here in case the
+    # decision was made to bring them back in
+    if option in ('-h','--help'):
+      usage()
+      return -1
+    elif option in ('-D','--database'):
+      database = val
+      service = HIVE_SERVICE
+    elif option in ('-t','--table'):
+      table =  val
+    elif option in ('-k','--list'):
+      action='listRepls'
+    elif option in ('-p','--path'):
+      path  = val
+      service = HDFS_SERVICE
+
+    else:
+      print >>sys.stderr, '\n\tUnknown flag:', option
+      usage()
+      return -1
+
+
+  API = ApiResource(cmHost, CM_PORT,  version=CM_VERSION, username=CM_USER, password=CM_PASSWD, use_tls=True)
+  LOG.debug('Connected to CM host on ' + cmHost)
+
+  procUser = getUsername()
+  LOG.debug('Process effective username is ' + procUser)
+  procGroup= getGroupname()
+  LOG.debug('Process effective group name is ' + procGroup)
+  procUserGroups = getUserGroups(procUser)
+  LOG.debug('All groups for user:' +  ', '.join(procUserGroups))
+  cluster = API.get_cluster(CLUSTER_NAME)
+
+
+### get details about the replication the user is interested in
+##  if service == HIVE_SERVICE:
+##    path = cm_repl.getDatabaseLocation(database)
+##    LOG.debug('DB location is ' + path)
+##    schedule = cm_repl.getHiveSchedule (cluster,service,database,table)
+##  else:
+##    schedule = cm_repl.getHdfsSchedule (cluster,service,path)
+##
+##  LOG.debug('HVE schedelu' + str(schedule.history[0].__dict__))
+##  LOG.debug('\n\nHVE hiveresult' + str(schedule.history[0].hiveResult.__dict__))
 
 
   prod_nav_proto = PROD_NAV_PROTO
@@ -229,38 +325,62 @@ def main(argv):
 
   nowDateTime= datetime.datetime.now()
   yearFromNow = datetime.timedelta(weeks=+52)
-  db = "*"
-  table="*"
+
+#  navEntity= getNavHiveEntity(prod_nav_proto,prod_nav_host,prod_nav_port,database,table)
+#  LOG.debug( "\n\nNavigator entity: " + str(navEntity) )
+
   nowEpoch=str(int(time.mktime(nowDateTime.timetuple()))) + "000"
   yearAgoEpoch=str(int(time.mktime((nowDateTime - yearFromNow).timetuple()))) + "000"
 
-# FILTER for allowed and success
-  prodSentry = getSentryGrants(prod_nav_proto,prod_nav_host,prod_nav_port,db,table,yearAgoEpoch,nowEpoch)
-  drSentry   = getSentryGrants(dr_nav_proto,dr_nav_host,dr_nav_port,db,table,yearAgoEpoch,nowEpoch)
 
-  prodSentryCommands= [{'sql':f['serviceValues']['operation_text'].toLower(),
+# TODO: FILTER for allowed and success
+  prodSentry = getSentryGrants(prod_nav_proto,prod_nav_host,prod_nav_port,database,table,yearAgoEpoch,nowEpoch)
+  drSentry   = getSentryGrants(dr_nav_proto,dr_nav_host,dr_nav_port,database,table,yearAgoEpoch,nowEpoch)
+
+  LOG.debug( "\n\nNavigator BIG Prod output: " + str(prodSentry) )
+
+ # convert to lowercase and remove extra whitespace
+  prodSentryCommands= [{'sql': re.sub(r'\s+',' ',f['serviceValues']['operation_text'].lower()), 
                         't':time.strptime(f['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')} for f in prodSentry if f['serviceValues'] ]
 
-  drSentryCommands=   [{'sql':f['serviceValues']['operation_text'].toLower(),
+  drSentryCommands=   [{'sql': re.sub(r'\s+',' ',f['serviceValues']['operation_text'].lower()), 
                         't':time.strptime(f['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')} for f in drSentry if f['serviceValues'] ]
 
-  prodSentryCommands.sort(key=lambda r: r['t'])
-  drSentryCommands.sort(key=lambda r: r['t'])
 
-  LOG.debug( "Navigator Prod output: " + str(prodSentryCommands) )
+  # get more recent first
+  prodSentryCommands.sort(key=lambda r: r['t'] ,reverse=True)
+  drSentryCommands.sort(key=lambda r: r['t']   ,reverse=True)
+
+  LOG.debug( "\n\nNavigator Prod output: " + str(prodSentryCommands) )
   LOG.debug( "\n\nNavigator DR output: " + str(drSentryCommands) )
 
   finalList=[]
   firstProdMatchIndex = -1
   firstDrMatchIndex = 0
-
+  prodIndex=0
   # first find where the first dr grant falls in the prod list
-  LOG.debug( "trying to Match dr output: " + str(prodSentryCommands[firstDrMatchIndex]) )      
-  firstMatchIndex = next(index for (index, d) in enumerate(prodSentryCommands) if d['sql'] == drSentryCommands[0]['sql'])
+  LOG.debug( "\n\ntrying to Match dr output: " + str(prodSentryCommands[firstDrMatchIndex]) )
+  if len(drSentryCommands)> 0 :
+      for f in prodSentryCommands :
+          LOG.debug( "\n\nworking ont: " + str(f) )          
+          match = next(index for (index, d) in enumerate(drSentryCommands) if d['sql'] == f['sql'])
+          LOG.debug( "match was t: " + str(match) )          
+          if match  != -1:
+              break
+          else:
+              prodIndex = prodIndex+1
+  else:
+      LOG.debug( "\nlen drwas 0: " )
+      prodIndex = len(prodSentryCommands) -1
 
-  if firstMatchIndex != -1 :
-      LOG.debug( "Matching Prod output: " + str(prodSentryCommands[firstMatchIndex]) )      
+  LOG.debug( "\nprodindx: " + str(prodIndex))
+  beeline_cmd=""
+  while prodIndex >= 0:
+      beeline_cmd+=(str(prodSentryCommands[prodIndex]['sql']) + "; " )
+      prodIndex = prodIndex - 1
 
+  LOG.debug( "\nappling this commmand: " + beeline_cmd)
+  call(["beeline", "-u", "'" + BEELINE_URL + "'", "-e",beeline_cmd])
 
   return 0
 
