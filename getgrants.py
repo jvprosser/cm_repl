@@ -277,7 +277,7 @@ def main(argv):
   # Argument parsing
   try:
     opts, args = getopt.getopt(argv[1:], '', #hD:t:sp:yl
-                               ['database=','table=','path=','help','status','follow=','dry-run','list','verbose'])
+                               ['database=','table=','help'])
 
 
   except getopt.GetoptError, err:
@@ -290,7 +290,7 @@ def main(argv):
 
 
   database = None
-  table    = ''
+  table    = None
   path     = None
   verbose  = False
 
@@ -303,11 +303,8 @@ def main(argv):
       return RET_BADOPTS
     elif option in ('-D','--database'):
       database = val
-
     elif option in ('-t','--table'):
       table =  val
-    elif option in ('-k','--list'):
-      action='listRepls'
     else:
       print >>sys.stderr, '\n\tUnknown flag:', option
       usage()
@@ -335,25 +332,14 @@ def main(argv):
 
   cluster = API.get_cluster(CLUSTER_NAME)
 
-
-### get details about the replication the user is interested in
-##  if service == HIVE_SERVICE:
-##    path = cm_repl.getDatabaseLocation(database)
-##    LOG.debug('DB location is ' + path)
-##    schedule = cm_repl.getHiveSchedule (cluster,service,database,table)
-##  else:
-##    schedule = cm_repl.getHdfsSchedule (cluster,service,path)
-##
-##  LOG.debug('HVE schedelu' + str(schedule.history[0].__dict__))
-##  LOG.debug('\n\nHVE hiveresult' + str(schedule.history[0].hiveResult.__dict__))
-
-
   prod_nav = {'proto': PROD_NAV_PROTO,'host': PROD_NAV_HOST ,'port': PROD_NAV_PORT ,'user':prod_nav_user, 'passwd' : prod_nav_passwd}
   dr_nav   = {'proto': DR_NAV_PROTO,'host': DR_NAV_HOST ,'port': DR_NAV_PORT ,'user':dr_nav_user, 'passwd' : dr_nav_passwd}
 
   nowDateTime= datetime.datetime.now()
   yearFromNow = datetime.timedelta(weeks=+52)
 
+  # get the schedule item's history so we can get the last successful run.
+  # we will use that as the start time for searching the audit history for this database/table's sentry grant/revokes
   schedule = cm_repl.getHiveSchedule(cluster,service,database,table)
   if schedule == None:
     print >>sys.stderr, '\n\tNo replication schedule defined for this object. (Regex patterns not supported by this utility)'
