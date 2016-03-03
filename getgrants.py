@@ -17,13 +17,14 @@
 
 
 """
-Command line interface to get sentry grants
+Command line interface to synchronize sentry grants
 Usage: %s [options]
 
 Options:
  --help               help message
+ --database <dbname>
+ --table <name>
 
- --verbose            Print status update when triggering a replication
 """
 # OMITTED -c --active currently active site [RTP|OMAHA]
 
@@ -54,24 +55,42 @@ import kerberos as k
 import urllib2_kerberos as ul2k
 import ConfigParser
 import cm_repl
+
+
 #
 # Customize this path
 #
-
 config_path_list=['/','h','o','m','e','/','j','p','r','o','s','s','e','r','/','c','m','_','r','e','p','l','.','i','n','i']
 CONFIG_PATH=''.join(config_path_list)
 
-nav_audit_user=['a','d','m','i','n']
-nav_audit_pass=['a','d','m','i','n']
+DR_NAV_USER    =['a','d','m','i','n']
+DR_NAV_PASSWD  =['a','d','m','i','n']
+               
+PROD_NAV_USER  =['a','d','m','i','n']
+PROD_NAV_PASSWD=['a','d','m','i','n']
 
-NAV_AUDIT_USER=''.join(nav_audit_user)
-NAV_AUDIT_PASS=''.join(nav_audit_pass)
+dr_nav_user    =''.join(DR_NAV_USER  )
+dr_nav_passwd  =''.join(DR_NAV_PASSWD)
+               
+prod_nav_user  =''.join(PROD_NAV_USER  )
+prod_nav_passwd=''.join(PROD_NAV_PASSWD)
 
-Config = ConfigParser.ConfigParser()
-Config.read(CONFIG_PATH)
-cm_section=Config.sections()[0]
 
-LOGLEVEL= "DEBUG" #Config.get(cm_section, 'log_level')
+try :
+  Config = ConfigParser.SafeConfigParser()
+  dataset = Config.read(CONFIG_PATH)
+  if len(dataset) != 1:
+    print >>sys.stderr, '\n\tCould not find configuration.'
+    sys.exit(255)
+  else:
+    cm_section=Config.sections()[0]
+    sentry_section=Config.sections()[1]
+    globals_section=Config.sections()[2]
+except ConfigParser.Error, e :
+  print >>sys.stderr, '\n\tCould not read configuration.'
+  sys.exit(255)
+
+
 DB_TEMPLATE_NAME= Config.get(cm_section, 'db_template_name')
 CM_VERSION	= Config.get(cm_section, 'cm_version')
 CM_USER	        = Config.get(cm_section, 'cm_user')
@@ -81,28 +100,24 @@ CM_DRSITE	= Config.get(cm_section, 'cm_drsite')
 CM_PORT	        = Config.get(cm_section, 'cm_port')
 CM_PEERNAME	= Config.get(cm_section, 'cm_peername')
 CLUSTER_NAME	= Config.get(cm_section, 'cluster_name')
-HTTPFS_HOST	= Config.get(cm_section, 'httpfs_host')
-HTTPFS_PORT	= Config.get(cm_section, 'httpfs_port')
-HTTPFS_PROTO	= Config.get(cm_section, 'httpfs_proto')
-WEBHCAT_HOST	= Config.get(cm_section, 'webhcat_host')
-WEBHCAT_PORT	= Config.get(cm_section, 'webhcat_port')
-WEBHCAT_PROTO	= Config.get(cm_section, 'webhcat_proto')
-HDFS_SERVICE	= Config.get(cm_section, 'hdfs_service')
 HIVE_SERVICE	= Config.get(cm_section, 'hive_service')
-HIVE_AUTOCREATE	= Config.get(cm_section, 'hive_autocreate')
-#HDFS_AUTOCREATE	= Config.get(cm_section, 'hdfs_autocreate')
-HDFS_AUTOCREATE = False
-MAX_POLLING_RETRIES = Config.get(cm_section, 'max_polling_retries')
-STATUS_POLL_DELAY   = Config.get(cm_section, 'status_poll_delay')
 
-PROD_NAV_PROTO   = Config.get(cm_section, 'prod_nav_proto')  
-PROD_NAV_HOST    = Config.get(cm_section, 'prod_nav_host')   
-PROD_NAV_PORT    = Config.get(cm_section, 'prod_nav_port')   
-DR_NAV_PROTO     = Config.get(cm_section, 'dr_nav_proto')    
-DR_NAV_HOST      = Config.get(cm_section, 'dr_nav_host')     
-DR_NAV_PORT      = Config.get(cm_section, 'dr_nav_port')     
-BEELINE_URL      = Config.get(cm_section, 'beeline_url')     
+LOGLEVEL         = Config.get(sentry_section, 'getgrants_log_level')
+PROD_NAV_PROTO   = Config.get(sentry_section, 'prod_nav_proto')  
+PROD_NAV_HOST    = Config.get(sentry_section, 'prod_nav_host')   
+PROD_NAV_PORT    = Config.get(sentry_section, 'prod_nav_port')   
+DR_NAV_PROTO     = Config.get(sentry_section, 'dr_nav_proto')    
+DR_NAV_HOST      = Config.get(sentry_section, 'dr_nav_host')     
+DR_NAV_PORT      = Config.get(sentry_section, 'dr_nav_port')     
+DR_BEELINE_URL   = Config.get(sentry_section, 'dr_beeline_url')     
 
+RET_OK                      = Config.get(globals_section, 'ret_ok')
+RET_BADOPTS                 = Config.get(globals_section, 'ret_badopts')
+RET_NOENT                   = Config.get(globals_section, 'ret_noent')
+RET_NOREP_EXISTS            = Config.get(globals_section, 'ret_norep_exists') 
+RET_REP_ALREADY_UNDERWAY    = Config.get(globals_section, 'ret_rep_already_underway')
+RET_REP_FAILED              = Config.get(globals_section, 'ret_rep_failed') 
+RET_NO_DBTEMPLATE_EXISTS    = Config.get(globals_section, 'ret_no_dbtemplate_exists') 
 
 def getUsername():
   """ get effective userid from process """
@@ -157,9 +172,9 @@ NAV_PROTO="https"
 
 #
 
-def getNavData(proto,host,port,navType,query):
+def getNavData(navData,navType,query):
 
-  getReplUrl = proto+"://" + host + ":" + port + "/api/v8/"+navType +"/?query=" +  query
+  getReplUrl = navData['proto']+"://" + navData['host'] + ":" + navData['port'] + "/api/v8/"+navType +"/?query=" +  query
   resp=None
   LOG.debug( "Gettinging NAV URL: " + getReplUrl )
   try:
@@ -169,14 +184,13 @@ def getNavData(proto,host,port,navType,query):
     # Add the username and password.
     # If we knew the realm, we could use it instead of None.
   
-    password_mgr.add_password(None, getReplUrl, NAV_AUDIT_USER, NAV_AUDIT_PASS)
+    password_mgr.add_password(None, getReplUrl, navData['user'], navData['passwd'])
     
     basicAuthHandler = urllib2.HTTPBasicAuthHandler(password_mgr)
   
-#    opener = urllib2.build_opener(handler)
     opener = urllib2.build_opener()
     opener.add_handler(basicAuthHandler)
-#    opener.add_handler(ul2k.HTTPKerberosAuthHandler())
+
     resp = opener.open(getReplUrl)
   except urllib2.HTTPError, e:
     print >>sys.stderr, '\n\tCould not retrieve location for database \'' + str(e)
@@ -189,8 +203,7 @@ def getNavData(proto,host,port,navType,query):
     return data
 
 
-def getSentryGrants(proto,host,port,user,db,table,start,end):
-
+def getSentryGrants(navData,user,db,table,start,end):
 
   query="username%3D%3D{0}%3Ballowed%3D%3Dtrue%3Bservice%3D%3Dsentry&startTime={1}&endTime={2}&limit=100&offset=0&format=JSON&attachment=false".format(user,start,end)
 
@@ -198,38 +211,39 @@ def getSentryGrants(proto,host,port,user,db,table,start,end):
             "&username%3D%3D" + user +\
             "&allowed%3D%3Dtrue&startfgTime="+start+ \
             "&endTime="+end+"&limit=1001&offset=0&format=JSON&attachment=false"
-  data = getNavData(proto,host,port,"audits",query)
+  data = getNavData(navData,"audits",query)
 
   return data
 
-
-# ((type:database) and (originalName:default))
-#  ((type:table) and ("originalName":"household")  and ( "parentPath": "/ilimisp01_eciw" ) )
-#  ((type:table) and ("originalName":"household")  and ( "parentPath": "ilimisp01_eciw" ) )
-
-def buildNavQuery (db,table,file):
-
-    if table == "":
-        query = '((type:database)%20AND%20(originalName:"{0}"))'.format(db)
-    else :
-        query = '((parentPath:"/{0}")%20AND%20(originalName:"{1}")%20AND%20(type:table))'.format(db,table)
-
-    return query
-
-
-
-def getNavHiveEntity(proto,host,port,db,table):
-
-  query = buildNavQuery(db,table,None)
-  data = getNavData(proto,host,port,"entities",query)
-  LOG.debug( "FINAL HIVE ENTITY OUTPUT: " + str(data) )
-  return data
-
-def getNavHdfsEntity(proto,host,port,hdfspath):
-
-  query = buildNavQuery(None,None,hdfspath)
-  data = getNavData(proto,host,port,"entities",query)
-  return data
+#  If we ever decide to update Navigator metadata (tags, props) to record backup times
+#
+## ((type:database) and (originalName:default))
+##  ((type:table) and ("originalName":"household")  and ( "parentPath": "/ilimisp01_eciw" ) )
+##  ((type:table) and ("originalName":"household")  and ( "parentPath": "ilimisp01_eciw" ) )
+#
+#def buildNavQuery (db,table,file):
+#
+#    if table == "":
+#        query = '((type:database)%20AND%20(originalName:"{0}"))'.format(db)
+#    else :
+#        query = '((parentPath:"/{0}")%20AND%20(originalName:"{1}")%20AND%20(type:table))'.format(db,table)
+#
+#    return query
+#
+#def getNavHiveEntity(navData,db,table):
+#
+#  query = buildNavQuery(db,table,None)
+#  data = getNavData(navData,"entities",query)
+#  LOG.debug( "FINAL HIVE ENTITY OUTPUT: " + str(data) )
+#  return data
+#
+#def getNavHdfsEntity(navData,hdfspath):
+#
+#  query = buildNavQuery(None,None,hdfspath)
+#  data = getNavData(navData,"entities",query)
+#  return data
+#
+#
 
 
 
@@ -256,7 +270,6 @@ def usage():
   doc = inspect.getmodule(usage).__doc__
   print >>sys.stderr, textwrap.dedent(doc % (sys.argv[0],))
 
-
 def main(argv):
 
   setup_logging(LOGLEVEL)
@@ -270,13 +283,14 @@ def main(argv):
   except getopt.GetoptError, err:
     print >>sys.stderr, err
     usage()
-    return -1
+    return RET_BADOPTS
+
   cmHost   = CM_DRSITE
   service="hive"
 
 
   database = None
-  table    = None
+  table    = ''
   path     = None
   verbose  = False
 
@@ -286,33 +300,38 @@ def main(argv):
     # decision was made to bring them back in
     if option in ('-h','--help'):
       usage()
-      return -1
+      return RET_BADOPTS
     elif option in ('-D','--database'):
       database = val
-      service = HIVE_SERVICE
+
     elif option in ('-t','--table'):
       table =  val
     elif option in ('-k','--list'):
       action='listRepls'
-    elif option in ('-p','--path'):
-      path  = val
-      service = HDFS_SERVICE
-
     else:
       print >>sys.stderr, '\n\tUnknown flag:', option
       usage()
-      return -1
+      return RET_BADOPTS
 
+# check argument compatibility
+  if args:
+    print >>sys.stderr, '\n\tUnknown trailing argument:', args
+    usage()
+    return RET_BADOPTS
+  if table == DB_TEMPLATE_NAME:
+    print >>sys.stderr, '\n\tInvalid table name.'
+    usage()
+    return RET_BADOPTS
+  if  database == None or table == None:
+    print >>sys.stderr, '\n\tPlease specify a database and a table.'
+    usage()
+    return RET_BADOPTS
 
   API = ApiResource(cmHost, CM_PORT,  version=CM_VERSION, username=CM_USER, password=CM_PASSWD, use_tls=True)
   LOG.debug('Connected to CM host on ' + cmHost)
 
   procUser = getUsername()
   LOG.debug('Process effective username is ' + procUser)
-#  procGroup= getGroupname()
-#  LOG.debug('Process effective group name is ' + procGroup)
-#  procUserGroups = getUserGroups(procUser)
-#  LOG.debug('All groups for user:' +  ', '.join(procUserGroups))
 
   cluster = API.get_cluster(CLUSTER_NAME)
 
@@ -329,28 +348,30 @@ def main(argv):
 ##  LOG.debug('\n\nHVE hiveresult' + str(schedule.history[0].hiveResult.__dict__))
 
 
-  prod_nav_proto = PROD_NAV_PROTO
-  prod_nav_host  = PROD_NAV_HOST 
-  prod_nav_port  = PROD_NAV_PORT 
-
-  dr_nav_proto  = DR_NAV_PROTO
-  dr_nav_host   = DR_NAV_HOST 
-  dr_nav_port   = DR_NAV_PORT    
+  prod_nav = {'proto': PROD_NAV_PROTO,'host': PROD_NAV_HOST ,'port': PROD_NAV_PORT ,'user':prod_nav_user, 'passwd' : prod_nav_passwd}
+  dr_nav   = {'proto': DR_NAV_PROTO,'host': DR_NAV_HOST ,'port': DR_NAV_PORT ,'user':dr_nav_user, 'passwd' : dr_nav_passwd}
 
   nowDateTime= datetime.datetime.now()
   yearFromNow = datetime.timedelta(weeks=+52)
 
-#  navEntity= getNavHiveEntity(prod_nav_proto,prod_nav_host,prod_nav_port,database,table)
-#  LOG.debug( "\n\nNavigator entity: " + str(navEntity) )
+  schedule = cm_repl.getHiveSchedule(cluster,service,database,table)
+  if schedule == None:
+    print >>sys.stderr, '\n\tNo replication schedule defined for this object. (Regex patterns not supported by this utility)'
+    return RET_NOREP_EXISTS
 
-  nowEpoch=str(int(time.mktime(nowDateTime.timetuple()))) + "000"
-  yearAgoEpoch=str(int(time.mktime((nowDateTime - yearFromNow).timetuple()))) + "000"
+  lastSuccessfulReplTimestamp  = cm_repl.getLastSuccessfulReplTimestamp(schedule)
+  
+  if lastSuccessfulReplTimestamp == None:
+    startEpoch=str(int(time.mktime((nowDateTime - yearFromNow).timetuple()))) + "000"    
+  else :
+    startEpoch=str(int(time.mktime((lastSuccessfulReplTimestamp).timetuple()))) + "000"    
+
+  endEpoch=str(int(time.mktime(nowDateTime.timetuple()))) + "000"
 
 
 # TODO: FILTER for allowed and success
-  prodSentry = getSentryGrants(prod_nav_proto,prod_nav_host,prod_nav_port,procUser,database,table,yearAgoEpoch,nowEpoch)
-  drSentry   = getSentryGrants(dr_nav_proto,dr_nav_host,dr_nav_port,procUser,database,table,yearAgoEpoch,nowEpoch)
-
+  prodSentry = getSentryGrants(prod_nav,procUser,database,table,startEpoch,endEpoch)
+  drSentry   = getSentryGrants(dr_nav  ,procUser,database,table,startEpoch,endEpoch)
 
  # convert to lowercase and remove extra whitespace
   prodSentryCommands= [{'sql': re.sub(r'\s+',' ',f['serviceValues']['operation_text'].lower()), 
@@ -400,7 +421,7 @@ def main(argv):
   if beeline_cmdList != "":
     fullBeelineCmd = "use " + database+";" + beeline_cmdList
     LOG.debug( "\napplying this commmand: " + fullBeelineCmd)
-    call(["beeline", "-u", "'" + BEELINE_URL + "'", "-e",fullBeelineCmd])
+    call(["beeline", "-u", "'" + DR_BEELINE_URL + "'", "-e",fullBeelineCmd])
   else:
     LOG.debug( "\nSentry grants are in sync. " )
 

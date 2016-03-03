@@ -28,7 +28,7 @@ Options:
  --status             get status
  --follow [n secs]    every n seconds, print the status of this job
  --path [path (excluding hdfs://....)] for HDFS backup
- --list               list replication schedules accessable by this user/group
+ --list               list replication schedules accessible by this user/group
  --verbose            Print status update when triggering a replication
 
 Return Values:
@@ -79,6 +79,7 @@ try :
     sys.exit(255)
   else:
     cm_section=Config.sections()[0]
+    globals_section=Config.sections()[2]
 except ConfigParser.Error, e :
   print >>sys.stderr, '\n\tCould not read configuration.'
   sys.exit(255)
@@ -108,13 +109,15 @@ HDFS_AUTOCREATE = False
 MAX_POLLING_RETRIES = Config.get(cm_section, 'max_polling_retries')
 STATUS_POLL_DELAY   = Config.get(cm_section, 'status_poll_delay')
 
-RET_OK=0
-RET_BADOPTS = 1
-RET_NOENT=2
-RET_NOREP_EXISTS=3
-RET_REP_ALREADY_UNDERWAY=4
-RET_REP_FAILED=5
-RET_NO_DBTEMPLATE_EXISTS=6
+
+RET_OK                      = Config.get(globals_section, 'ret_ok')
+RET_BADOPTS                 = Config.get(globals_section, 'ret_badopts')
+RET_NOENT                   = Config.get(globals_section, 'ret_noent')
+RET_NOREP_EXISTS            = Config.get(globals_section, 'ret_norep_exists') 
+RET_REP_ALREADY_UNDERWAY    = Config.get(globals_section, 'ret_rep_already_underway')
+RET_REP_FAILED              = Config.get(globals_section, 'ret_rep_failed') 
+RET_NO_DBTEMPLATE_EXISTS    = Config.get(globals_section, 'ret_no_dbtemplate_exists') 
+
 
 
 
@@ -328,6 +331,10 @@ def printScheduleLastResult (service,schedule) :
 def getScheduleLastResult (schedule) :
     return schedule.history[0].success
 
+
+def getLastSuccessfulReplTimestamp(schedule):
+  last = next((item.startTime for item in schedule.history if item.success == True), None)
+  return last
 
 
 #
@@ -604,7 +611,7 @@ def getAccessableSchedules(cluster,procUser,groupList):
 # get the hive schedule for this database/table pair
 #
 def getHiveSchedule (cluster,service,database,table) :
-    hiveService =  cluster.get_service("hive")
+    hiveService =  cluster.get_service(service)
     schedules=hiveService.get_replication_schedules()
 
     output_dict = [x for x in schedules if x.hiveArguments.tableFilters[0].database  == database and
