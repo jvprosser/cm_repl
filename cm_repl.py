@@ -30,6 +30,16 @@ Options:
  --path [path (excluding hdfs://....)] for HDFS backup
  --list               list replication schedules accessable by this user/group
  --verbose            Print status update when triggering a replication
+
+Return Values:
+  RET_OK = 0
+  RET_BADOPTS = 1
+  RET_NOENT = 2
+  RET_NOREP_EXISTS = 3
+  RET_REP_ALREADY_UNDERWAY = 4
+  RET_REP_FAILED = 5
+  RET_NO_DBTEMPLATE_EXISTS = 6
+  
 """
 # OMITTED -c --active currently active site [RTP|OMAHA]
 
@@ -61,10 +71,18 @@ import ConfigParser
 # hide the path
 config_path_list=['/','h','o','m','e','/','j','p','r','o','s','s','e','r','/','c','m','_','r','e','p','l','.','i','n','i']
 CONFIG_PATH=''.join(config_path_list)
+try :
+  Config = ConfigParser.SafeConfigParser()
+  dataset = Config.read(CONFIG_PATH)
+  if len(dataset) != 1:
+    print >>sys.stderr, '\n\tCould not find configuration.'
+    sys.exit(255)
+  else:
+    cm_section=Config.sections()[0]
+except ConfigParser.Error, e :
+  print >>sys.stderr, '\n\tCould not read configuration.'
+  sys.exit(255)
 
-Config = ConfigParser.ConfigParser()
-Config.read(CONFIG_PATH)
-cm_section=Config.sections()[0]
 
 LOGLEVEL= Config.get(cm_section, 'log_level')
 DB_TEMPLATE_NAME= Config.get(cm_section, 'db_template_name')
@@ -89,6 +107,16 @@ HIVE_AUTOCREATE	= Config.get(cm_section, 'hive_autocreate')
 HDFS_AUTOCREATE = False
 MAX_POLLING_RETRIES = Config.get(cm_section, 'max_polling_retries')
 STATUS_POLL_DELAY   = Config.get(cm_section, 'status_poll_delay')
+
+RET_OK=0
+RET_BADOPTS = 1
+RET_NOENT=2
+RET_NOREP_EXISTS=3
+RET_REP_ALREADY_UNDERWAY=4
+RET_REP_FAILED=5
+RET_NO_DBTEMPLATE_EXISTS=6
+
+
 
 def getUsername():
   """ get effective userid from process """
@@ -272,19 +300,30 @@ def printScheduleStatus (service,schedule) :
 # get the success value of the last activity for this schedule item
 #
 def printScheduleLastResult (service,schedule) :
+  LOG.debug("schedule first history  was " + str(schedule.history[0].__dict__))
 
-    if service==HIVE_SERVICE:
-      if schedule.history[0].hiveResult != None:
-        printHiveResults(schedule.history[0].hiveResult,True)
-    else:
-      if schedule.history[0].hdfsResult != None:
-        printHdfsResults(schedule.history[0].hdfsResult,True)
+  if service==HIVE_SERVICE:
+    LOG.debug("schedule hive resulty  was " + str(schedule.history[0].hiveResult.__dict__))
+    LOG.debug("schedule hive.dataReplicationResult resulty  was " + str(schedule.history[0].hiveResult.dataReplicationResult.__dict__))
+
     if schedule.history[0].resultMessage != None:
       print >>sys.stdout,  '\n\tFinal Result Message: ' +  schedule.history[0].resultMessage
     else:
       print >>sys.stdout,  '\n\tFinal Result Message: No Message Provided'
 
-    return schedule.history[0].success
+    if schedule.history[0].hiveResult != None:
+      printHiveResults(schedule.history[0].hiveResult,True)
+
+      if schedule.history[0].hiveResult.dataReplicationResult != None:
+        printHdfsResults(schedule.history[0].hiveResult.dataReplicationResult,True)
+
+  else:
+    LOG.debug("schedule hdfs result  was " + str(schedule.history[0].hdfsResult.__dict__))
+    if schedule.history[0].hdfsResult != None:
+      printHdfsResults(schedule.history[0].hdfsResult,True)
+
+  print >>sys.stdout,  '\n'
+  return schedule.history[0].success
 
 def getScheduleLastResult (schedule) :
     return schedule.history[0].success
@@ -326,13 +365,41 @@ def printHdfsResults(result,printDetails):
   print >>sys.stdout,  'progress            : ' + str(result.progress    )
   print >>sys.stdout,  'jobdetails          : ' + str(result.jobDetailsUri    )
 
+
+#  if result.snapshottedDirs != None:
+  print >>sys.stdout,'snapshottedDirs       : ' +  str(result.snapshottedDirs)
+  print >>sys.stdout,  'numFilesDryRun      : ' + str(result.numFilesDryRun) 
+  print >>sys.stdout,  'numBytesDryRun      : ' + str(result.numBytesDryRun) 
+
+#  if result.jobId != None:
+  print >>sys.stdout,  'jobId               : ' + str(result.jobId) 
+  print >>sys.stdout,  'numFilesSkipped     : ' + str(result.numFilesSkipped) 
+  print >>sys.stdout,  'numBytesExpected    : ' + str(result.numBytesExpected) 
+  print >>sys.stdout,  'numFilesExpected    : ' + str(result.numFilesExpected) 
+#  if result.setupError != None:
+  print >>sys.stdout,  'setupError          : ' + str(result.setupError) 
+  print >>sys.stdout,  'dryRun              : ' + str(result.dryRun) 
+  print >>sys.stdout,  'runAsUser           : ' + str(result.runAsUser) 
+#  if result.failedFiles != None:
+  print >>sys.stdout,  'failedFiles         : ' + str(result.failedFiles)
+
+
   if printDetails == True and result.counters != None:
     for r in result.counters:
       print >>sys.stdout,  r['group'] +': ' + r['name'] + ' = ' + str(r['value'])
 
+
 def printHiveResults(result,printDetails):
   print >>sys.stdout,  '\n\tHive Replication Result'
   print >>sys.stdout,  '-------------------------------------------------------------------------------------------------'
+ 
+  print >>sys.stdout,  'dryRun              : ' + str(result.dryRun) 
+  print >>sys.stdout,  'runAsUser           : ' + str(result.runAsUser) 
+  print >>sys.stdout,  'impalaUDFs          : '  + str(result.impalaUDFs)
+  print >>sys.stdout,  'tableCount          : '  + str(result.tableCount)
+  print >>sys.stdout,  'phase               : '  + str(result.phase)
+  print >>sys.stdout,  'errorCount          : ' + str(result.errorCount)
+
   if result.tables != None and result.tableCount > 0:
     print >>sys.stdout,  'Tables'
     for r in result.tables:
@@ -341,21 +408,21 @@ def printHiveResults(result,printDetails):
   if result.errors != None and result.errorCount > 0:
     print >>sys.stdout,  'Errors: '
     for r in result.errors:
-      print >>sys.stdout,  r
+     print >>sys.stdout,  r
 
 
-  if result.dataReplicationResult != None:
-    print >>sys.stdout,  'numBytesCopied      : ' + str(result.dataReplicationResult.numBytesCopied     )
-    print >>sys.stdout,  'numBytesCopyFailed  : ' + str(result.dataReplicationResult.numBytesCopyFailed )
-    print >>sys.stdout,  'numBytesSkipped     : ' + str(result.dataReplicationResult.numBytesSkipped    )
-    print >>sys.stdout,  'numFilesCopied      : ' + str(result.dataReplicationResult.numFilesCopied     )
-    print >>sys.stdout,  'numFilesDeleted     : ' + str(result.dataReplicationResult.numFilesDeleted    )
-    print >>sys.stdout,  'progress            : ' + str(result.dataReplicationResult.progress    )
-    print >>sys.stdout,  'jobdetails          : ' + str(result.dataReplicationResult.jobDetailsUri    )
-
-    if printDetails == True and result.dataReplicationResult.counters != None:
-      for r in result.dataReplicationResult.counters:
-        print >>sys.stdout,  r['group'] +': ' + r['name'] + ' = ' + str(r['value'])
+#  if result.dataReplicationResult != None:
+#    print >>sys.stdout,  'numBytesCopied      : ' + str(result.dataReplicationResult.numBytesCopied     )
+#    print >>sys.stdout,  'numBytesCopyFailed  : ' + str(result.dataReplicationResult.numBytesCopyFailed )
+#    print >>sys.stdout,  'numBytesSkipped     : ' + str(result.dataReplicationResult.numBytesSkipped    )
+#    print >>sys.stdout,  'numFilesCopied      : ' + str(result.dataReplicationResult.numFilesCopied     )
+#    print >>sys.stdout,  'numFilesDeleted     : ' + str(result.dataReplicationResult.numFilesDeleted    )
+#    print >>sys.stdout,  'progress            : ' + str(result.dataReplicationResult.progress    )
+#    print >>sys.stdout,  'jobdetails          : ' + str(result.dataReplicationResult.jobDetailsUri    )
+#
+#    if printDetails == True and result.dataReplicationResult.counters != None:
+#      for r in result.dataReplicationResult.counters:
+#        print >>sys.stdout,  r['group'] +': ' + r['name'] + ' = ' + str(r['value'])
 
 #
 # create a hive BDR schedule instance
@@ -614,7 +681,7 @@ def main(argv):
   except getopt.GetoptError, err:
     print >>sys.stderr, err
     usage()
-    return -1
+    return RET_BADOPTS
 
   service  = None
   dryRun   = False
@@ -634,7 +701,7 @@ def main(argv):
     # decision was made to bring them back in
     if option in ('-h','--help'):
       usage()
-      return -1
+      return RET_OK
     elif option in ('-D','--database'):
       database = val
       service = HIVE_SERVICE
@@ -661,32 +728,32 @@ def main(argv):
     else:
       print >>sys.stderr, '\n\tUnknown flag:', option
       usage()
-      return -1
+      return RET_BADOPTS
 
 # check argument compatibility
   if args:
     print >>sys.stderr, '\n\tUnknown trailing argument:', args
     usage()
-    return -1
+    return RET_BADOPTS
   if table == DB_TEMPLATE_NAME:
     print >>sys.stderr, '\n\tInvalid table name.'
     usage()
-    return -1
+    return RET_BADOPTS
   if action != 'listRepls':
     if path != None and (table != None or database != None) :
       print >>sys.stderr, '\n\tDo not specify HDFS and Hive replication arguments at the same time.'
       usage()
-      return -1
+      return RET_BADOPTS
     elif path == None and  database == None :
       print >>sys.stderr, '\n\tYou must specify either a path or database and table.\n \
       \tIf you specified the table using a regular expression, you must use that exact syntax enclosed in single quotes.'
       usage()
-      return -1
+      return RET_BADOPTS
     elif path == None and  ( database == None or table == None):
       print >>sys.stderr, '\n\tYou must specify a database and a table.\n \
       \tIf you specified the table using a regular expression, you must use that exact syntax enclosed in single quotes.'
       usage()
-      return -1
+      return RET_BADOPTS
   else:
     if path != None or table != None or database != None :
       print >>sys.stderr, '\n\tAccessable replications will be listed. Additional arguments ignored.'
@@ -722,7 +789,7 @@ def main(argv):
     print >>sys.stdout,  '\n\tSearching replication schedules for user: ' + procUser + ' group(s): ' + ', '.join(procUserGroups)
     schedules = getAccessableSchedules(cluster,procUser,procUserGroups)
     printReplicationSchedules(schedules)
-    return 0
+    return RET_OK
 
 # get details about the replication the user is interested in
   if service == HIVE_SERVICE:
@@ -736,33 +803,33 @@ def main(argv):
   validPath=filterAccessablePaths(procUser,procUserGroups,[{'schedule': schedule, 'service': service,'path':path}])
   if len(validPath) == 0 :
     print >>sys.stderr, '\n\tInvalid privs or item does not exist.\n'
-    return -1
+    return RET_NOENT
 
   if action == 'getStatus':
     if schedule == None:
       print >>sys.stderr, '\n\tNo replication schedule defined for this object. '
-      return -1
+      return RET_NOREP_EXISTS
     else:
       active = getScheduleStatus(schedule)
       if active == True :
         print >>sys.stderr, '\n\tThere is currently a replication underway for this schedule.\n'
         printScheduleStatus(service,schedule)
-        return -1
+        return RET_OK
       else :
         print >>sys.stderr, '\n\tThere is currently NO replication underway for this schedule.\n'
         printScheduleLastResult (service,schedule)
-        return 0
+        return RET_OK
 
   if action == 'followStatus':
     if schedule == None:
       print >>sys.stderr, '\n\tNo replication schedule defined for this object. '
-      return -1
+      return RET_NOREP_EXISTS
     else:
       print >>sys.stdout, '\tStart polling for status'
       verbose = True
       status = pollReplicationStatus(int(MAX_POLLING_RETRIES), followPeriod ,cluster, service, schedule,verbose)
       if status ==  False:
-        return -1
+        return RET_REP_FAILED
       return 0
 
   if schedule == None:
@@ -771,7 +838,7 @@ def main(argv):
       result = addHiveSchedule( cluster, database, table )
       if result == None:
         print >>sys.stderr, '\n\tNo replication template defined for database.'
-        return -1
+        return RET_NO_DBTEMPLATE_EXISTS
       LOG.debug( 'Getting id for newly added schedule.')
       schedule = getHiveSchedule (cluster,service,database,table)
     elif HDFS_AUTOCREATE == 'True' :
@@ -781,7 +848,7 @@ def main(argv):
       schedule = getHdfsSchedule (cluster,service,path)
     else:
       print >>sys.stderr, '\n\tNo Replication schedule defined for this object. '
-      return -1
+      return RET_NOREP_EXISTS
 
   bdrId = schedule.id
 
@@ -792,9 +859,9 @@ def main(argv):
     print >>sys.stdout, '\tStart polling for status'
   status = pollReplicationStatus(int(MAX_POLLING_RETRIES), int(STATUS_POLL_DELAY) ,cluster, service, schedule,verbose)
   if status ==  False:
-    return -1
+    return RET_REP_FAILED
 
-  return 0
+  return RET_OK
 
 #
 # The 'main' entry

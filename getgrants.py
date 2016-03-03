@@ -391,9 +391,7 @@ def main(argv):
       startIndex -= 1 
       break
 
-
   LOG.debug( "Start index is : " + str(startIndex) )
-
 
   while startIndex  >= 0:
     beeline_cmdList+=(str(prodSentryCommands[startIndex]['sql']) + "; " )
