@@ -298,13 +298,13 @@ def main(argv):
   LOG.debug( "\n\nNavigator DR output: " + str(drSentryCommands) )
 
 
-  print >>sys.stdout,  '\n\tProduction Sentry Grants '
+  print >>sys.stdout,  '\n\tProduction Sentry Grants Going Back 12 Months'
   print >>sys.stdout,  '-------------------------------------------------------------------------------------------------'
 
   for r in prodSentryCommands :
     print >>sys.stdout, '\t{0}\t{1}'.format(strftime("%Y-%m-%d %H:%M:%S",r['t']),r['sql'])
 
-  print >>sys.stdout,  '\n\tDR  Sentry Grants '
+  print >>sys.stdout,  '\n\tDR  Sentry Grants Going Back 12 Months'
   print >>sys.stdout,  '-------------------------------------------------------------------------------------------------'
 
   for r in drSentryCommands :

@@ -38,6 +38,7 @@ import logging
 import sys
 from subprocess import call
 import textwrap
+from time import mktime, strftime,gmtime
 import time
 import datetime
 from datetime import timedelta
@@ -49,8 +50,6 @@ from cm_api.endpoints.types import ApiHiveReplicationArguments,ApiHdfsReplicatio
 import urllib2
 import base64
 import json
-#sys.path.append('/usr/lib64/cmf/agent/build/env/lib/python2.7/site-packages/kerberos-1.1.1-py2.7-linux-x86_64.egg/')
-#sys.path.append('/usr/lib64/cmf/agent/build/env/lib/python2.7/site-packages/urllib2_kerberos-0.1.6-py2.7.egg/')
 import kerberos as k
 import urllib2_kerberos as ul2k
 import ConfigParser
@@ -100,7 +99,6 @@ CM_DRSITE	= Config.get(cm_section, 'cm_drsite')
 CM_PORT	        = Config.get(cm_section, 'cm_port')
 CM_PEERNAME	= Config.get(cm_section, 'cm_peername')
 CLUSTER_NAME	= Config.get(cm_section, 'cluster_name')
-HIVE_SERVICE	= Config.get(cm_section, 'hive_service')
 
 LOGLEVEL         = Config.get(sentry_section, 'getgrants_log_level')
 PROD_NAV_PROTO   = Config.get(sentry_section, 'prod_nav_proto')  
@@ -110,6 +108,8 @@ DR_NAV_PROTO     = Config.get(sentry_section, 'dr_nav_proto')
 DR_NAV_HOST      = Config.get(sentry_section, 'dr_nav_host')     
 DR_NAV_PORT      = Config.get(sentry_section, 'dr_nav_port')     
 DR_BEELINE_URL   = Config.get(sentry_section, 'dr_beeline_url')     
+NAV_LOG_FILE     = Config.get(sentry_section, 'nav_log_file')
+
 
 RET_OK                      = Config.get(globals_section, 'ret_ok')
 RET_BADOPTS                 = Config.get(globals_section, 'ret_badopts')
@@ -136,41 +136,6 @@ def getUserGroups(user):
 
 
 
-
-NAV_HOST="jvp1-2.vpc.cloudera.com"
-NAV_PORT="7187"
-NAV_PROTO="https"
-
-#  c.setopt(pycurl.URL, "http://jvp1-2:7187)
-#  
-#  b = StringIO.StringIO()
-#  s = StringIO.StringIO()
-#  c.setopt(pycurl.WRITEFUNCTION, b.write)
-#  c.setopt(pycurl.FOLLOWLOCATION, 1)
-#  c.setopt(pycurl.MAXREDIRS, 5)
-#  c.setopt(pycurl.VERBOSE, 1)
-#  c.setopt(pycurl.HTTPHEADER, ['Accept: application/json'])
-#  # this will need to have username:password,for now.
-#  c.setopt(pycurl.USERPWD, 'admin:admin')
-#  c.perform()
-#  body = b.getvalue()
-#  
-#  #print(body)
-#  
-#  json_object = json.loads(body)
-#  
-#  print" database|table|firstClassParentId|name|extractorRunId|tags|sourceId|deleted|userEntity|dataType|originalDescription|parentPath|originalName|sourceType|internalType|type|properties\
-#  |identity|description"
-#  
-#  for fields in json_object:
-#    dummy,db,table=fields['parentPath'].split("/");
-#    print "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s" % (db,table, fields['firstClassParentId'], fields['name'], fields['extractorRunId'], fields['tags'], \
-#          fields['sourceId'], fields['deleted'], fields['userEntity'], fields['dataType'], fields['originalDescription'], fields['parentPath'], fields['originalName'], \
-#          fields['sourceType'], fields['internalType'], fields['type'], fields['properties'], fields['identity'], fields['description'])
-#  
-#  https://jvp1-2.vpc.cloudera.com:7187/api/v8/audits/?query=service%3D%3Dsentry&startTime=1436456072000&endTime=1456761168000&limit=1001&offset=0&format=JSON&attachment=false
-
-#
 
 def getNavData(navData,navType,query):
 
@@ -207,10 +172,6 @@ def getSentryGrants(navData,user,db,table,start,end):
 
   query="username%3D%3D{0}%3Ballowed%3D%3Dtrue%3Bservice%3D%3Dsentry&startTime={1}&endTime={2}&limit=100&offset=0&format=JSON&attachment=false".format(user,start,end)
 
-  oldquery = "service%3D%3Dsentry&database%3D%3D" + db + "&table_name%3D%3D" + table +   \
-            "&username%3D%3D" + user +\
-            "&allowed%3D%3Dtrue&startfgTime="+start+ \
-            "&endTime="+end+"&limit=1001&offset=0&format=JSON&attachment=false"
   data = getNavData(navData,"audits",query)
 
   return data
@@ -286,13 +247,10 @@ def main(argv):
     return RET_BADOPTS
 
   cmHost   = CM_DRSITE
-  service="hive"
-
 
   database = None
   table    = None
   path     = None
-  verbose  = False
 
   for option, val in opts:
     LOG.debug( "option is " + option +" val is " + val)
@@ -338,31 +296,16 @@ def main(argv):
   nowDateTime= datetime.datetime.now()
   yearFromNow = datetime.timedelta(weeks=+52)
 
-  # get the schedule item's history so we can get the last successful run.
-  # we will use that as the start time for searching the audit history for this database/table's sentry grant/revokes
-  schedule = cm_repl.getHiveSchedule(cluster,service,database,table)
-  if schedule == None:
-    print >>sys.stderr, '\n\tNo replication schedule defined for this object. (Regex patterns not supported by this utility)'
-    return RET_NOREP_EXISTS
 
-  lastSuccessfulReplTimestamp  = cm_repl.getLastSuccessfulReplTimestamp(schedule)
-  
-  if lastSuccessfulReplTimestamp == None:
-    startEpoch=str(int(time.mktime((nowDateTime - yearFromNow).timetuple()))) + "000"    
-  else :
-    startEpoch=str(int(time.mktime((lastSuccessfulReplTimestamp).timetuple()))) + "000"    
+  startEpoch=str(int(time.mktime((nowDateTime - yearFromNow).timetuple()))) + "000"    
 
   endEpoch=str(int(time.mktime(nowDateTime.timetuple()))) + "000"
 
 
 # TODO: FILTER for allowed and success
-  prodSentry = getSentryGrants(prod_nav,procUser,database,table,startEpoch,endEpoch)
   drSentry   = getSentryGrants(dr_nav  ,procUser,database,table,startEpoch,endEpoch)
 
  # convert to lowercase and remove extra whitespace
-  prodSentryCommands= [{'sql': re.sub(r'\s+',' ',f['serviceValues']['operation_text'].lower()), 
-                        't':time.strptime(f['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')} for f in prodSentry if f['serviceValues'] 
-                       and f['serviceValues']['database_name'] == database and f['serviceValues']['table_name'] == table ]
 
   drSentryCommands=   [{'sql': re.sub(r'\s+',' ',f['serviceValues']['operation_text'].lower()), 
                         't':time.strptime(f['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')} for f in drSentry if f['serviceValues'] 
@@ -370,8 +313,30 @@ def main(argv):
 
 
   # get more recent first
-  prodSentryCommands.sort(key=lambda r: r['t'] ,reverse=True)
+
   drSentryCommands.sort(key=lambda r: r['t']   ,reverse=True)
+
+  startEpoch=str(int(time.mktime((drSentryCommands[0]['t'])))) + "000"
+
+  prodSentry = getSentryGrants(prod_nav,procUser,database,table,startEpoch,endEpoch)
+  prodSentryCommands= [{'sql': re.sub(r'\s+',' ',f['serviceValues']['operation_text'].lower()), 
+                        't':time.strptime(f['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')} for f in prodSentry if f['serviceValues'] 
+                       and f['serviceValues']['database_name'] == database and f['serviceValues']['table_name'] == table ]
+
+  prodSentryCommands.sort(key=lambda r: r['t'] ,reverse=True)
+
+
+  if len(prodSentryCommands) != 0:
+    print >>sys.stdout,  '\n\tProduction Sentry Grants '
+    print >>sys.stdout,  '-------------------------------------------------------------------------------------------------'
+
+    for r in prodSentryCommands :
+      print >>sys.stdout, '\t{0}\t{1}'.format(strftime("%Y-%m-%d %H:%M:%S",r['t']),r['sql'])
+
+  print >>sys.stdout,  '\n\tLast DR Sentry Grant'
+  print >>sys.stdout,  '-------------------------------------------------------------------------------------------------'
+  print >>sys.stdout, '\t{0}\t{1}'.format(strftime("%Y-%m-%d %H:%M:%S",drSentryCommands[0]['t']),drSentryCommands[0]['sql'])
+  print >>sys.stdout,  '\n'
 
   LOG.debug( "\n\nNavigator Prod output: " + str(prodSentryCommands) )
   LOG.debug( "\n\nNavigator DR output: " + str(drSentryCommands) )
@@ -380,38 +345,23 @@ def main(argv):
   beeline_cmdList=""
   # first find where the first dr grant falls in the prod list
 
-  gotMatch = False
-  for (index, f) in enumerate( prodSentryCommands ) :
-    LOG.debug( "\n\nworking on: " + str(f['sql']) )          
-    #match = next(index for (index, d) in enumerate(drSentryCommands) if d['sql'] == f['sql'])
-    startIndex  = index
-    for d in drSentryCommands :
-      if d['sql'] == f['sql'] :
-        LOG.debug( "Match was : " + f['sql'] )
-        LOG.debug( "Matching prod index was : " + str(index) )
-        gotMatch = True
-        break
+  myfile = open(NAV_LOG_FILE,"a")
+  
+  count=0
+  for r in prodSentryCommands :
+    count+=1
+    beeline_cmdList += r['sql'] + '; '
+    myfile.write("{0}\t{1}; ".format(strftime("%Y-%m-%d %H:%M", gmtime()),r['sql']))
 
-        # startIndex represents the first prod grant statement that is not in the DR audit trail.
-        # When we get a match, then we back up one.
-    if gotMatch == True:
-      startIndex -= 1 
-      break
-
-  LOG.debug( "Start index is : " + str(startIndex) )
-
-  while startIndex  >= 0:
-    beeline_cmdList+=(str(prodSentryCommands[startIndex]['sql']) + "; " )
-    startIndex -= 1
 
   if beeline_cmdList != "":
     fullBeelineCmd = "use " + database+";" + beeline_cmdList
     LOG.debug( "\napplying this commmand: " + fullBeelineCmd)
     call(["beeline", "-u", "'" + DR_BEELINE_URL + "'", "-e",fullBeelineCmd])
   else:
-    LOG.debug( "\nSentry grants are in sync. " )
+    print >>sys.stdout, "\t\nSentry grants are in sync.\n "
 
-  return 0
+  return count
 
 #
 # The 'main' entry
