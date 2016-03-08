@@ -83,42 +83,36 @@ try :
   if len(dataset) != 1:
     print >>sys.stderr, '\n\tCould not find configuration.'
     sys.exit(255)
-  else:
-    cm_section=Config.sections()[0]
-    sentry_section=Config.sections()[1]
-    globals_section=Config.sections()[2]
 except ConfigParser.Error, e :
   print >>sys.stderr, '\n\tCould not read configuration.'
   sys.exit(255)
 
+DB_TEMPLATE_NAME= Config.get('CM_REPL', 'db_template_name')
+CM_VERSION	= Config.get('CM_REPL', 'cm_version')
+CM_USER	        = Config.get('CM_REPL', 'cm_user')
+CM_PASSWD	= Config.get('CM_REPL', 'cm_passwd')
+CM_PRIMARY	= Config.get('CM_REPL', 'cm_primary')
+CM_DRSITE	= Config.get('CM_REPL', 'cm_drsite')
+CM_PORT	        = Config.get('CM_REPL', 'cm_port')
+CM_PEERNAME	= Config.get('CM_REPL', 'cm_peername')
+CLUSTER_NAME	= Config.get('CM_REPL', 'cluster_name')
 
-DB_TEMPLATE_NAME= Config.get(cm_section, 'db_template_name')
-CM_VERSION	= Config.get(cm_section, 'cm_version')
-CM_USER	        = Config.get(cm_section, 'cm_user')
-CM_PASSWD	= Config.get(cm_section, 'cm_passwd')
-CM_PRIMARY	= Config.get(cm_section, 'cm_primary')
-CM_DRSITE	= Config.get(cm_section, 'cm_drsite')
-CM_PORT	        = Config.get(cm_section, 'cm_port')
-CM_PEERNAME	= Config.get(cm_section, 'cm_peername')
-CLUSTER_NAME	= Config.get(cm_section, 'cluster_name')
-HIVE_SERVICE	= Config.get(cm_section, 'hive_service')
+LOGLEVEL         = Config.get('GET_GRANTS', 'getgrants_log_level')
+PROD_NAV_PROTO   = Config.get('GET_GRANTS', 'prod_nav_proto')  
+PROD_NAV_HOST    = Config.get('GET_GRANTS', 'prod_nav_host')   
+PROD_NAV_PORT    = Config.get('GET_GRANTS', 'prod_nav_port')   
+DR_NAV_PROTO     = Config.get('GET_GRANTS', 'dr_nav_proto')    
+DR_NAV_HOST      = Config.get('GET_GRANTS', 'dr_nav_host')     
+DR_NAV_PORT      = Config.get('GET_GRANTS', 'dr_nav_port')     
+DR_BEELINE_URL   = Config.get('GET_GRANTS', 'dr_beeline_url')     
 
-LOGLEVEL         = Config.get(sentry_section, 'getgrants_log_level')
-PROD_NAV_PROTO   = Config.get(sentry_section, 'prod_nav_proto')  
-PROD_NAV_HOST    = Config.get(sentry_section, 'prod_nav_host')   
-PROD_NAV_PORT    = Config.get(sentry_section, 'prod_nav_port')   
-DR_NAV_PROTO     = Config.get(sentry_section, 'dr_nav_proto')    
-DR_NAV_HOST      = Config.get(sentry_section, 'dr_nav_host')     
-DR_NAV_PORT      = Config.get(sentry_section, 'dr_nav_port')     
-DR_BEELINE_URL   = Config.get(sentry_section, 'dr_beeline_url')     
-
-RET_OK                      = Config.get(globals_section, 'ret_ok')
-RET_BADOPTS                 = Config.get(globals_section, 'ret_badopts')
-RET_NOENT                   = Config.get(globals_section, 'ret_noent')
-RET_NOREP_EXISTS            = Config.get(globals_section, 'ret_norep_exists') 
-RET_REP_ALREADY_UNDERWAY    = Config.get(globals_section, 'ret_rep_already_underway')
-RET_REP_FAILED              = Config.get(globals_section, 'ret_rep_failed') 
-RET_NO_DBTEMPLATE_EXISTS    = Config.get(globals_section, 'ret_no_dbtemplate_exists') 
+RET_OK                      = Config.get('GLOBALS', 'ret_ok')
+RET_BADOPTS                 = Config.get('GLOBALS', 'ret_badopts')
+RET_NOENT                   = Config.get('GLOBALS', 'ret_noent')
+RET_NOREP_EXISTS            = Config.get('GLOBALS', 'ret_norep_exists') 
+RET_REP_ALREADY_UNDERWAY    = Config.get('GLOBALS', 'ret_rep_already_underway')
+RET_REP_FAILED              = Config.get('GLOBALS', 'ret_rep_failed') 
+RET_NO_DBTEMPLATE_EXISTS    = Config.get('GLOBALS', 'ret_no_dbtemplate_exists') 
 
 def getUsername():
   """ get effective userid from process """
@@ -133,7 +127,6 @@ def getUserGroups(user):
   gid = pwd.getpwnam(user).pw_gid
   groups.append(grp.getgrgid(gid).gr_name)
   return groups
-
 
 def getNavData(navData,navType,query):
 
@@ -264,15 +257,6 @@ def main(argv):
   nowDateTime= datetime.datetime.now()
   yearFromNow = datetime.timedelta(weeks=+52)
 
-  # get the schedule item's history so we can get the last successful run.
-  # we will use that as the start time for searching the audit history for this database/table's sentry grant/revokes
-  schedule = cm_repl.getHiveSchedule(cluster,service,database,table)
-  if schedule == None:
-    print >>sys.stderr, '\n\tNo replication schedule defined for this object. (Regex patterns not supported by this utility)'
-    return RET_NOREP_EXISTS
-
-  lastSuccessfulReplTimestamp  = cm_repl.getLastSuccessfulReplTimestamp(schedule)
-  
   startEpoch=str(int(time.mktime((nowDateTime - yearFromNow).timetuple()))) + "000"    
   endEpoch=str(int(time.mktime(nowDateTime.timetuple()))) + "000"
 
@@ -317,4 +301,5 @@ def main(argv):
 # The 'main' entry
 #
 if __name__ == '__main__':
-  sys.exit(main(sys.argv))
+  t = main(sys.argv)
+  sys.exit(t)

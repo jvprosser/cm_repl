@@ -69,7 +69,8 @@ import ConfigParser
 # Customize this path
 #
 # hide the path
-config_path_list=['/','h','o','m','e','/','j','p','r','o','s','s','e','r','/','c','m','_','r','e','p','l','.','i','n','i']
+#config_path_list=['/','h','o','m','e','/','j','p','r','o','s','s','e','r','/','c','m','_','r','e','p','l','.','i','n','i']
+config_path_list=['.','/','c','m','_','r','e','p','l','.','i','n','i']
 CONFIG_PATH=''.join(config_path_list)
 try :
   Config = ConfigParser.SafeConfigParser()
@@ -77,46 +78,44 @@ try :
   if len(dataset) != 1:
     print >>sys.stderr, '\n\tCould not find configuration.'
     sys.exit(255)
-  else:
-    cm_section=Config.sections()[0]
-    globals_section=Config.sections()[2]
 except ConfigParser.Error, e :
   print >>sys.stderr, '\n\tCould not read configuration.'
   sys.exit(255)
 
 
-LOGLEVEL= Config.get(cm_section, 'log_level')
-DB_TEMPLATE_NAME= Config.get(cm_section, 'db_template_name')
-CM_VERSION	= Config.get(cm_section, 'cm_version')
-CM_USER	        = Config.get(cm_section, 'cm_user')
-CM_PASSWD	= Config.get(cm_section, 'cm_passwd')
-CM_PRIMARY	= Config.get(cm_section, 'cm_primary')
-CM_DRSITE	= Config.get(cm_section, 'cm_drsite')
-CM_PORT	        = Config.get(cm_section, 'cm_port')
-CM_PEERNAME	= Config.get(cm_section, 'cm_peername')
-CLUSTER_NAME	= Config.get(cm_section, 'cluster_name')
-HTTPFS_HOST	= Config.get(cm_section, 'httpfs_host')
-HTTPFS_PORT	= Config.get(cm_section, 'httpfs_port')
-HTTPFS_PROTO	= Config.get(cm_section, 'httpfs_proto')
-WEBHCAT_HOST	= Config.get(cm_section, 'webhcat_host')
-WEBHCAT_PORT	= Config.get(cm_section, 'webhcat_port')
-WEBHCAT_PROTO	= Config.get(cm_section, 'webhcat_proto')
-HDFS_SERVICE	= Config.get(cm_section, 'hdfs_service')
-HIVE_SERVICE	= Config.get(cm_section, 'hive_service')
-HIVE_AUTOCREATE	= Config.get(cm_section, 'hive_autocreate')
-#HDFS_AUTOCREATE	= Config.get(cm_section, 'hdfs_autocreate')
+
+LOGLEVEL        = Config.get('CM_REPL', 'log_level')
+DB_TEMPLATE_NAME= Config.get('CM_REPL', 'db_template_name')
+CM_VERSION	= Config.get('CM_REPL', 'cm_version')
+CM_USER	        = Config.get('CM_REPL', 'cm_user')
+CM_PASSWD	= Config.get('CM_REPL', 'cm_passwd')
+CM_PRIMARY	= Config.get('CM_REPL', 'cm_primary')
+CM_DRSITE	= Config.get('CM_REPL', 'cm_drsite')
+CM_PORT	        = Config.get('CM_REPL', 'cm_port')
+CM_PEERNAME	= Config.get('CM_REPL', 'cm_peername')
+CLUSTER_NAME	= Config.get('CM_REPL', 'cluster_name')
+HTTPFS_HOST	= Config.get('CM_REPL', 'httpfs_host')
+HTTPFS_PORT	= Config.get('CM_REPL', 'httpfs_port')
+HTTPFS_PROTO	= Config.get('CM_REPL', 'httpfs_proto')
+WEBHCAT_HOST	= Config.get('CM_REPL', 'webhcat_host')
+WEBHCAT_PORT	= Config.get('CM_REPL', 'webhcat_port')
+WEBHCAT_PROTO	= Config.get('CM_REPL', 'webhcat_proto')
+HDFS_SERVICE	= Config.get('CM_REPL', 'hdfs_service')
+HIVE_SERVICE	= Config.get('CM_REPL', 'hive_service')
+HIVE_AUTOCREATE	= Config.get('CM_REPL', 'hive_autocreate')
+#HDFS_AUTOCREATE	= Config.get('CM_REPL', 'hdfs_autocreate')
 HDFS_AUTOCREATE = False
-MAX_POLLING_RETRIES = Config.get(cm_section, 'max_polling_retries')
-STATUS_POLL_DELAY   = Config.get(cm_section, 'status_poll_delay')
+MAX_POLLING_RETRIES = Config.get('CM_REPL', 'max_polling_retries')
+STATUS_POLL_DELAY   = Config.get('CM_REPL', 'status_poll_delay')
 
 
-RET_OK                      = Config.get(globals_section, 'ret_ok')
-RET_BADOPTS                 = Config.get(globals_section, 'ret_badopts')
-RET_NOENT                   = Config.get(globals_section, 'ret_noent')
-RET_NOREP_EXISTS            = Config.get(globals_section, 'ret_norep_exists') 
-RET_REP_ALREADY_UNDERWAY    = Config.get(globals_section, 'ret_rep_already_underway')
-RET_REP_FAILED              = Config.get(globals_section, 'ret_rep_failed') 
-RET_NO_DBTEMPLATE_EXISTS    = Config.get(globals_section, 'ret_no_dbtemplate_exists') 
+RET_OK                      = Config.get('GLOBALS', 'ret_ok')
+RET_BADOPTS                 = Config.get('GLOBALS', 'ret_badopts')
+RET_NOENT                   = Config.get('GLOBALS', 'ret_noent')
+RET_NOREP_EXISTS            = Config.get('GLOBALS', 'ret_norep_exists') 
+RET_REP_ALREADY_UNDERWAY    = Config.get('GLOBALS', 'ret_rep_already_underway')
+RET_REP_FAILED              = Config.get('GLOBALS', 'ret_rep_failed') 
+RET_NO_DBTEMPLATE_EXISTS    = Config.get('GLOBALS', 'ret_no_dbtemplate_exists') 
 
 
 

@@ -81,43 +81,37 @@ try :
   if len(dataset) != 1:
     print >>sys.stderr, '\n\tCould not find configuration.'
     sys.exit(255)
-  else:
-    cm_section=Config.sections()[0]
-    sentry_section=Config.sections()[1]
-    globals_section=Config.sections()[2]
 except ConfigParser.Error, e :
   print >>sys.stderr, '\n\tCould not read configuration.'
   sys.exit(255)
 
+DB_TEMPLATE_NAME= Config.get('CM_REPL', 'db_template_name')
+CM_VERSION	= Config.get('CM_REPL', 'cm_version')
+CM_USER	        = Config.get('CM_REPL', 'cm_user')
+CM_PASSWD	= Config.get('CM_REPL', 'cm_passwd')
+CM_PRIMARY	= Config.get('CM_REPL', 'cm_primary')
+CM_DRSITE	= Config.get('CM_REPL', 'cm_drsite')
+CM_PORT	        = Config.get('CM_REPL', 'cm_port')
+CM_PEERNAME	= Config.get('CM_REPL', 'cm_peername')
+CLUSTER_NAME	= Config.get('CM_REPL', 'cluster_name')
 
-DB_TEMPLATE_NAME= Config.get(cm_section, 'db_template_name')
-CM_VERSION	= Config.get(cm_section, 'cm_version')
-CM_USER	        = Config.get(cm_section, 'cm_user')
-CM_PASSWD	= Config.get(cm_section, 'cm_passwd')
-CM_PRIMARY	= Config.get(cm_section, 'cm_primary')
-CM_DRSITE	= Config.get(cm_section, 'cm_drsite')
-CM_PORT	        = Config.get(cm_section, 'cm_port')
-CM_PEERNAME	= Config.get(cm_section, 'cm_peername')
-CLUSTER_NAME	= Config.get(cm_section, 'cluster_name')
+LOGLEVEL         = Config.get('GET_GRANTS', 'getgrants_log_level')
+PROD_NAV_PROTO   = Config.get('GET_GRANTS', 'prod_nav_proto')  
+PROD_NAV_HOST    = Config.get('GET_GRANTS', 'prod_nav_host')   
+PROD_NAV_PORT    = Config.get('GET_GRANTS', 'prod_nav_port')   
+DR_NAV_PROTO     = Config.get('GET_GRANTS', 'dr_nav_proto')    
+DR_NAV_HOST      = Config.get('GET_GRANTS', 'dr_nav_host')     
+DR_NAV_PORT      = Config.get('GET_GRANTS', 'dr_nav_port')     
+DR_BEELINE_URL   = Config.get('GET_GRANTS', 'dr_beeline_url')     
+NAV_LOG_FILE     = Config.get('GET_GRANTS', 'nav_log_file')
 
-LOGLEVEL         = Config.get(sentry_section, 'getgrants_log_level')
-PROD_NAV_PROTO   = Config.get(sentry_section, 'prod_nav_proto')  
-PROD_NAV_HOST    = Config.get(sentry_section, 'prod_nav_host')   
-PROD_NAV_PORT    = Config.get(sentry_section, 'prod_nav_port')   
-DR_NAV_PROTO     = Config.get(sentry_section, 'dr_nav_proto')    
-DR_NAV_HOST      = Config.get(sentry_section, 'dr_nav_host')     
-DR_NAV_PORT      = Config.get(sentry_section, 'dr_nav_port')     
-DR_BEELINE_URL   = Config.get(sentry_section, 'dr_beeline_url')     
-NAV_LOG_FILE     = Config.get(sentry_section, 'nav_log_file')
-
-
-RET_OK                      = Config.get(globals_section, 'ret_ok')
-RET_BADOPTS                 = Config.get(globals_section, 'ret_badopts')
-RET_NOENT                   = Config.get(globals_section, 'ret_noent')
-RET_NOREP_EXISTS            = Config.get(globals_section, 'ret_norep_exists') 
-RET_REP_ALREADY_UNDERWAY    = Config.get(globals_section, 'ret_rep_already_underway')
-RET_REP_FAILED              = Config.get(globals_section, 'ret_rep_failed') 
-RET_NO_DBTEMPLATE_EXISTS    = Config.get(globals_section, 'ret_no_dbtemplate_exists') 
+RET_OK                      = Config.get('GLOBALS', 'ret_ok')
+RET_BADOPTS                 = Config.get('GLOBALS', 'ret_badopts')
+RET_NOENT                   = Config.get('GLOBALS', 'ret_noent')
+RET_NOREP_EXISTS            = Config.get('GLOBALS', 'ret_norep_exists') 
+RET_REP_ALREADY_UNDERWAY    = Config.get('GLOBALS', 'ret_rep_already_underway')
+RET_REP_FAILED              = Config.get('GLOBALS', 'ret_rep_failed') 
+RET_NO_DBTEMPLATE_EXISTS    = Config.get('GLOBALS', 'ret_no_dbtemplate_exists') 
 
 def getUsername():
   """ get effective userid from process """
@@ -132,10 +126,6 @@ def getUserGroups(user):
   gid = pwd.getpwnam(user).pw_gid
   groups.append(grp.getgrgid(gid).gr_name)
   return groups
-
-
-
-
 
 def getNavData(navData,navType,query):
 
@@ -296,11 +286,8 @@ def main(argv):
   nowDateTime= datetime.datetime.now()
   yearFromNow = datetime.timedelta(weeks=+52)
 
-
   startEpoch=str(int(time.mktime((nowDateTime - yearFromNow).timetuple()))) + "000"    
-
   endEpoch=str(int(time.mktime(nowDateTime.timetuple()))) + "000"
-
 
 # TODO: FILTER for allowed and success
   drSentry   = getSentryGrants(dr_nav  ,procUser,database,table,startEpoch,endEpoch)
@@ -310,7 +297,6 @@ def main(argv):
   drSentryCommands=   [{'sql': re.sub(r'\s+',' ',f['serviceValues']['operation_text'].lower()), 
                         't':time.strptime(f['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')} for f in drSentry if f['serviceValues'] 
                        and f['serviceValues']['database_name'] == database and f['serviceValues']['table_name'] == table ]
-
 
   # get more recent first
 
@@ -351,7 +337,7 @@ def main(argv):
   for r in prodSentryCommands :
     count+=1
     beeline_cmdList += r['sql'] + '; '
-    myfile.write("{0}\t{1}; ".format(strftime("%Y-%m-%d %H:%M", gmtime()),r['sql']))
+    myfile.write("{0}\t{1};\n ".format(strftime("%Y-%m-%d %H:%M", gmtime()),r['sql']))
 
 
   if beeline_cmdList != "":
