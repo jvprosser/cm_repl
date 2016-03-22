@@ -144,10 +144,15 @@ def main(argv):
   nowDateTime= datetime.datetime.now()
   yearFromNow = datetime.timedelta(weeks=+52)
 
-  startEpoch=str(int(time.mktime((nowDateTime - yearFromNow).timetuple()))) + "000"    
-  endEpoch=str(int(time.mktime(nowDateTime.timetuple()))) + "000"
+  startTime = (nowDateTime - yearFromNow).timetuple()
+  endTime = (nowDateTime.timetuple())
+
+  startEpoch=str(int(time.mktime(startTime))) + "000"    
+  endEpoch=str(int(time.mktime(endTime))) + "000"
 
 # TODO: FILTER for allowed and success
+  print >>sys.stdout, '\n\tRetrieving grants from DR cluster between {0} and {1}'.format(strftime("%Y-%m-%d %H:%M:%S",startTime),
+                                                                                         strftime("%Y-%m-%d %H:%M:%S",endTime ))
   drSentry   = getSentryGrants(dr_nav  ,procUser,database,table,startEpoch,endEpoch,LOG)
 
 #  LOG.debug( "\n\nNavigator RAW DR output: " + str(drSentry) )
@@ -163,10 +168,15 @@ def main(argv):
   if len(drSentryCommands) > 0:
     # get more recent first
     drSentryCommands.sort(key=lambda r: r['t']   ,reverse=True)
-    startEpoch=str(int(time.mktime((drSentryCommands[0]['t'])))) + "000"
+    startTime = drSentryCommands[0]['t']
+    startEpoch=str(int(time.mktime(startTime))) + "000"
 
+
+  print >>sys.stdout, '\n\tRetrieving grants from PROD cluster between {0} and {1}'.format(strftime("%Y-%m-%d %H:%M:%S",startTime),
+                                                                                           strftime("%Y-%m-%d %H:%M:%S",endTime ))
 
   prodSentry = getSentryGrants(prod_nav,procUser,database,table,startEpoch,endEpoch,LOG)
+
 
 #  LOG.debug( "\n\nNavigator RAW  PROD output: " + str(prodSentry) )
 
