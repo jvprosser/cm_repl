@@ -143,9 +143,10 @@ def main(argv):
 
   nowDateTime= datetime.datetime.now()
   yearFromNow = datetime.timedelta(weeks=+52)
+  weekFromNow = datetime.timedelta(weeks=+1)
 
   startTime = (nowDateTime - yearFromNow).timetuple()
-  endTime = (nowDateTime.timetuple())
+  endTime = ((nowDateTime + weekFromNow).timetuple())
 
   startEpoch=str(int(time.mktime(startTime))) + "000"    
   endEpoch=str(int(time.mktime(endTime))) + "000"
