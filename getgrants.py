@@ -54,7 +54,7 @@ import kerberos as k
 import urllib2_kerberos as ul2k
 import ConfigParser
 
-from cm_repl_lib import init,getUsername,getNavData
+from cm_repl_lib import init,getUsername,getNavData,getSentryGrants
 
 import cm_repl
 #
@@ -308,7 +308,7 @@ def main(argv):
 
   startEpoch=str(int(time.mktime((drSentryCommands[0]['t'])))) + "000"
 
-  prodSentry = getSentryGrants(prod_nav,procUser,database,table,startEpoch,endEpoch)
+  prodSentry = getSentryGrants(prod_nav,procUser,database,table,startEpoch,endEpoch,LOG)
 
 #  LOG.debug( "\n\nNavigator RAW  PROD output: " + str(prodSentry) )
 

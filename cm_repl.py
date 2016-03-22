@@ -66,80 +66,9 @@ import urllib2_kerberos as ul2k
 import ConfigParser
 
 from cm_repl_lib import init,getUsername,getNavData,getSentryGrants,getGroupname,getUserGroups
-#
-##
-## Customize this path
-##
-## hide the path
-##config_path_list=['/','h','o','m','e','/','j','p','r','o','s','s','e','r','/','c','m','_','r','e','p','l','.','i','n','i']
-#config_path_list=['.','/','c','m','_','r','e','p','l','.','i','n','i']
-#CONFIG_PATH=''.join(config_path_list)
-#try :
-#  Config = ConfigParser.SafeConfigParser()
-#  dataset = Config.read(CONFIG_PATH)
-#  if len(dataset) != 1:
-#    print >>sys.stderr, '\n\tCould not find configuration.'
-#    sys.exit(255)
-#except ConfigParser.Error, e :
-#  print >>sys.stderr, '\n\tCould not read configuration.'
-#  sys.exit(255)
-#
-#
-#
-#LOGLEVEL        = Config.get('CM_REPL', 'log_level')
-#DB_TEMPLATE_NAME= Config.get('CM_REPL', 'db_template_name')
-#CM_VERSION	= Config.get('CM_REPL', 'cm_version')
-#CM_USER	        = Config.get('CM_REPL', 'cm_user')
-#CM_PASSWD	= Config.get('CM_REPL', 'cm_passwd')
-#CM_PRIMARY	= Config.get('CM_REPL', 'cm_primary')
-#CM_DRSITE	= Config.get('CM_REPL', 'cm_drsite')
-#CM_PORT	        = Config.get('CM_REPL', 'cm_port')
-#CM_PEERNAME	= Config.get('CM_REPL', 'cm_peername')
-#CLUSTER_NAME	= Config.get('CM_REPL', 'cluster_name')
-#HTTPFS_HOST	= Config.get('CM_REPL', 'httpfs_host')
-#HTTPFS_PORT	= Config.get('CM_REPL', 'httpfs_port')
-#HTTPFS_PROTO	= Config.get('CM_REPL', 'httpfs_proto')
-#WEBHCAT_HOST	= Config.get('CM_REPL', 'webhcat_host')
-#WEBHCAT_PORT	= Config.get('CM_REPL', 'webhcat_port')
-#WEBHCAT_PROTO	= Config.get('CM_REPL', 'webhcat_proto')
-#HDFS_SERVICE	= Config.get('CM_REPL', 'hdfs_service')
-#HIVE_SERVICE	= Config.get('CM_REPL', 'hive_service')
-#HIVE_AUTOCREATE	= Config.get('CM_REPL', 'hive_autocreate')
-##HDFS_AUTOCREATE	= Config.get('CM_REPL', 'hdfs_autocreate')
-#HDFS_AUTOCREATE = False
-#MAX_POLLING_RETRIES = Config.get('CM_REPL', 'max_polling_retries')
-#STATUS_POLL_DELAY   = Config.get('CM_REPL', 'status_poll_delay')
-#
-#
-#RET_OK                      = Config.get('GLOBALS', 'ret_ok')
-#RET_BADOPTS                 = Config.get('GLOBALS', 'ret_badopts')
-#RET_NOENT                   = Config.get('GLOBALS', 'ret_noent')
-#RET_NOREP_EXISTS            = Config.get('GLOBALS', 'ret_norep_exists') 
-#RET_REP_ALREADY_UNDERWAY    = Config.get('GLOBALS', 'ret_rep_already_underway')
-#RET_REP_FAILED              = Config.get('GLOBALS', 'ret_rep_failed') 
-#RET_NO_DBTEMPLATE_EXISTS    = Config.get('GLOBALS', 'ret_no_dbtemplate_exists') 
-#
-#
-#
-#
-#def getUsername():
-#  """ get effective userid from process """
-#  return pwd.getpwuid(os.getuid()).pw_name
-#
-#def getGroupname():
-#  """ get effective group from process """
-#  return grp.getgrgid(os.getgid()).gr_name
-#
-#def getUserGroups(user):
-#  groups = [g.gr_name for g in grp.getgrall() if user in g.gr_mem]
-#  gid = pwd.getpwnam(user).pw_gid
-#  groups.append(grp.getgrgid(gid).gr_name)
-#  return groups
-#
-#
-# remove unaccessible schedule entries
-# user,group - string - names from linus
-# pathList - (scheduleItem,service,path) tuples
+
+cm_version=''
+
 def filterAccessablePaths(cf,user,groupList,pathList):
   isOK=False
 
@@ -247,9 +176,11 @@ def getDatabaseLocation(cf,database):
 #
 # poll CM until the action is completed or we run out of time.
 #
-def pollReplicationStatus(tries, delay,cluster,service,schedule,verbose):
-    mdelay = float(delay) # make mutable float
+def pollReplicationStatus(cf,cluster,service,schedule,verbose):
+    tries = int(cf['MAX_POLLING_RETRIES'])
+    delay = int(cf['STATUS_POLL_DELAY'])
     backoff = 0
+    mdelay = float(delay) # make mutable float
     time.sleep(mdelay)
     for n in range(tries):
       schedule = getSchedule(cluster,service,schedule.id)
@@ -266,7 +197,7 @@ def pollReplicationStatus(tries, delay,cluster,service,schedule,verbose):
         mdelay += backoff
       else:
         if verbose == True:
-          lastRes=printScheduleLastResult (service,schedule)
+          lastRes=printScheduleLastResult (cf,service,schedule)
         else :
           lastRes = getScheduleLastResult (schedule)
         return lastRes
@@ -283,7 +214,7 @@ def pollReplicationStatus(tries, delay,cluster,service,schedule,verbose):
 # , 219000), 'hiveResult': <cm_api.endpoints.types.ApiHiveReplicationResult object at 0xe1c7d0>, 'active': True, 'endTime': None, 'id': 1186, 'hostRef': None} .
 
 def getScheduleStatus (schedule) :
-  if CM_VERSION == 11 :
+  if cm_version == 11 :
     return schedule.active
   else :
     return schedule.history[0].active
@@ -303,10 +234,10 @@ def printScheduleStatus (service,schedule) :
 #
 # get the success value of the last activity for this schedule item
 #
-def printScheduleLastResult (service,schedule) :
+def printScheduleLastResult (cf,service,schedule) :
   LOG.debug("schedule first history  was " + str(schedule.history[0].__dict__))
 
-  if service==HIVE_SERVICE:
+  if service==cf['HIVE_SERVICE']:
     LOG.debug("schedule hive resulty  was " + str(schedule.history[0].hiveResult.__dict__))
     LOG.debug("schedule hive.dataReplicationResult resulty  was " + str(schedule.history[0].hiveResult.dataReplicationResult.__dict__))
 
@@ -677,9 +608,9 @@ def usage():
   print >>sys.stderr, textwrap.dedent(doc % (sys.argv[0],))
 
 
-def main(argv,cf):
+def main(cf,argv):
 
-  setup_logging(cf['LOGLEVEL'])
+  setup_logging(cf['CM_REPL_LOGLEVEL'])
 
   # Argument parsing
   try:
@@ -689,7 +620,7 @@ def main(argv,cf):
   except getopt.GetoptError, err:
     print >>sys.stderr, err
     usage()
-    return RET_BADOPTS
+    return cf['RET_BADOPTS']
 
   service  = None
   dryRun   = False
@@ -781,7 +712,7 @@ def main(argv,cf):
 #   print >>sys.stderr, 'Cannot replicate from that cluster!'
 #    return -1
 
-
+  vm_version = cf['CM_VERSION']
   API = ApiResource(cmHost, cf['CM_PORT'],  version=cf['CM_VERSION'], username=cf['CM_USER'], password=cf['CM_PASSWD'], use_tls=True)
   LOG.debug('Connected to CM host on ' + cmHost)
 
@@ -825,7 +756,7 @@ def main(argv,cf):
         return cf['RET_OK']
       else :
         print >>sys.stderr, '\n\tThere is currently NO replication underway for this schedule.\n'
-        printScheduleLastResult (service,schedule)
+        printScheduleLastResult (cf,service,schedule)
         return cf['RET_OK']
 
   if action == 'followStatus':
@@ -835,7 +766,7 @@ def main(argv,cf):
     else:
       print >>sys.stdout, '\tStart polling for status'
       verbose = True
-      status = pollReplicationStatus(int(cf['MAX_POLLING_RETRIES']), followPeriod ,cluster, service, schedule,verbose)
+      status = pollReplicationStatus(cf,cluster, service, schedule,verbose)
       if status ==  False:
         return cf['RET_REP_FAILED']
       return 0
@@ -843,7 +774,7 @@ def main(argv,cf):
   if schedule == None:
     if service == cf['HIVE_SERVICE'] and cf['HIVE_AUTOCREATE'] == 'True' :
       print >>sys.stdout, '\tAdding HIVE schedule with table name: ' + table
-      result = addHiveSchedule( cluster, database, table )
+      result = addHiveSchedule(cf, cluster, database, table )
       if result == None:
         print >>sys.stderr, '\n\tNo replication template defined for database.'
         return cf['RET_NO_DBTEMPLATE_EXISTS']
@@ -851,7 +782,7 @@ def main(argv,cf):
       schedule = getHiveSchedule (cluster,service,database,table)
     elif cf['HDFS_AUTOCREATE'] == 'True' :
       print >>sys.stdout, '\tAdding HDFS schedule with path: ' + path
-      result = addHDFSSchedule(cluster,path)
+      result = addHDFSSchedule(cf,cluster,path)
       LOG.debug( 'Getting id for newly added schedule.')
       schedule = getHdfsSchedule (cluster,service,path)
     else:
@@ -865,7 +796,7 @@ def main(argv,cf):
   schedule = getSchedule(cluster,service,bdrId)
   if verbose == True:
     print >>sys.stdout, '\tStart polling for status'
-  status = pollReplicationStatus(int(cf['MAX_POLLING_RETRIES']), int(cf['STATUS_POLL_DELAY']) ,cluster, service, schedule,verbose)
+  status = pollReplicationStatus(cf ,cluster, service, schedule,verbose)
   if status ==  False:
     return cf['RET_REP_FAILED']
 
@@ -876,4 +807,5 @@ def main(argv,cf):
 #
 if __name__ == '__main__':
   cf=init()
-  sys.exit(main(sys.argv,cf))
+  val = main(cf,sys.argv)
+  sys.exit(val)

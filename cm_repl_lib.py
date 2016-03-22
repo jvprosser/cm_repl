@@ -43,15 +43,15 @@ def init():
     sys.exit(255)
   
 
-
-  config['DB_TEMPLATE_NAME']= Config.get('CM_REPL', 'db_template_name')
-  config['CM_VERSION']	= Config.get('CM_REPL', 'cm_version')
+  config['CM_REPL_LOGLEVEL']    = Config.get('CM_REPL', 'log_level')
+  config['DB_TEMPLATE_NAME']    = Config.get('CM_REPL', 'db_template_name')
+  config['CM_VERSION']	        = Config.get('CM_REPL', 'cm_version')
   config['CM_USER']	        = Config.get('CM_REPL', 'cm_user')
-  config['CM_PASSWD']	= Config.get('CM_REPL', 'cm_passwd')
-  config['CM_PRIMARY']	= Config.get('CM_REPL', 'cm_primary')
-  config['CM_DRSITE']	= Config.get('CM_REPL', 'cm_drsite')
+  config['CM_PASSWD']	        = Config.get('CM_REPL', 'cm_passwd')
+  config['CM_PRIMARY']	        = Config.get('CM_REPL', 'cm_primary')
+  config['CM_DRSITE']	        = Config.get('CM_REPL', 'cm_drsite')
   config['CM_PORT']	        = Config.get('CM_REPL', 'cm_port')
-  config['CM_PEERNAME']	= Config.get('CM_REPL', 'cm_peername')
+  config['CM_PEERNAME']	        = Config.get('CM_REPL', 'cm_peername')
   config['CLUSTER_NAME']	= Config.get('CM_REPL', 'cluster_name')
 
   config['HTTPFS_HOST']	        = Config.get('CM_REPL', 'httpfs_host')
@@ -66,8 +66,6 @@ def init():
   config['HDFS_AUTOCREATE']     = False
   config['MAX_POLLING_RETRIES'] = Config.get('CM_REPL', 'max_polling_retries')
   config['STATUS_POLL_DELAY']   = Config.get('CM_REPL', 'status_poll_delay')
-
-
 
   
   config['LOGLEVEL']         = Config.get('GET_GRANTS', 'getgrants_log_level')
