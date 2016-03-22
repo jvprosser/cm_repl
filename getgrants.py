@@ -159,11 +159,12 @@ def main(argv):
                         't':time.strptime(f['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')} for f in drSentry if f['serviceValues'] 
                        and f['serviceValues']['database_name'] == database and f['serviceValues']['table_name'] == table ]
 
-  # get more recent first
+  # unless there are grants on the DR side for this entity, use the same startepoch as we do for prod
+  if len(drSentryCommands) > 0:
+    # get more recent first
+    drSentryCommands.sort(key=lambda r: r['t']   ,reverse=True)
+    startEpoch=str(int(time.mktime((drSentryCommands[0]['t'])))) + "000"
 
-  drSentryCommands.sort(key=lambda r: r['t']   ,reverse=True)
-
-  startEpoch=str(int(time.mktime((drSentryCommands[0]['t'])))) + "000"
 
   prodSentry = getSentryGrants(prod_nav,procUser,database,table,startEpoch,endEpoch,LOG)
 
@@ -176,16 +177,23 @@ def main(argv):
   prodSentryCommands.sort(key=lambda r: r['t'] ,reverse=True)
 
 
-  if len(prodSentryCommands) != 0:
-    print >>sys.stdout,  '\n\tProduction Sentry Grants '
-    print >>sys.stdout,  '-------------------------------------------------------------------------------------------------'
+  print >>sys.stdout,  '\n\tProduction Sentry Grants '
+  print >>sys.stdout,  '-------------------------------------------------------------------------------------------------'
 
+  if len(prodSentryCommands) > 0:
     for r in prodSentryCommands :
       print >>sys.stdout, '\t{0}\t{1}'.format(strftime("%Y-%m-%d %H:%M:%S",r['t']),r['sql'])
+  else:
+    print >>sys.stdout, '\tNone'
+  print >>sys.stdout,  '\n'
 
   print >>sys.stdout,  '\n\tLast DR Sentry Grant'
   print >>sys.stdout,  '-------------------------------------------------------------------------------------------------'
-  print >>sys.stdout, '\t{0}\t{1}'.format(strftime("%Y-%m-%d %H:%M:%S",drSentryCommands[0]['t']),drSentryCommands[0]['sql'])
+
+  if len(drSentryCommands) > 0:
+    print >>sys.stdout, '\t{0}\t{1}'.format(strftime("%Y-%m-%d %H:%M:%S",drSentryCommands[0]['t']),drSentryCommands[0]['sql'])
+  else:
+    print >>sys.stdout, '\tNever'
   print >>sys.stdout,  '\n'
 
   LOG.debug( "\n\nNavigator Prod output: " + str(prodSentryCommands) )
