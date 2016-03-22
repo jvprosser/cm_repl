@@ -65,6 +65,7 @@ import kerberos as k
 import urllib2_kerberos as ul2k
 import ConfigParser
 
+#sys.path.append('')
 from cm_repl_lib import init,getUsername,getNavData,getSentryGrants,getGroupname,getUserGroups
 
 cm_version=''
