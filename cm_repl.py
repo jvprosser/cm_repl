@@ -66,7 +66,7 @@ import urllib2_kerberos as ul2k
 import ConfigParser
 
 #sys.path.append('')
-from cm_repl_lib import init,getUsername,getNavData,getSentryGrants,getGroupname,getUserGroups
+from cm_repl_lib import init,getUsername,getNavData,getGroupname,getUserGroups
 
 cm_version=''
 
@@ -236,28 +236,30 @@ def printScheduleStatus (service,schedule) :
 # get the success value of the last activity for this schedule item
 #
 def printScheduleLastResult (cf,service,schedule) :
-  LOG.debug("schedule first history  was " + str(schedule.history[0].__dict__))
-
-  if service==cf['HIVE_SERVICE']:
-    LOG.debug("schedule hive resulty  was " + str(schedule.history[0].hiveResult.__dict__))
-    LOG.debug("schedule hive.dataReplicationResult resulty  was " + str(schedule.history[0].hiveResult.dataReplicationResult.__dict__))
-
-    if schedule.history[0].resultMessage != None:
-      print >>sys.stdout,  '\n\tFinal Result Message: ' +  schedule.history[0].resultMessage
+  if len(schedule.history) > 0:
+    LOG.debug("schedule first history  was " + str(schedule.history[0].__dict__))
+  
+    if service==cf['HIVE_SERVICE']:
+      LOG.debug("schedule hive resulty  was " + str(schedule.history[0].hiveResult.__dict__))
+      LOG.debug("schedule hive.dataReplicationResult result  was " + str(schedule.history[0].hiveResult.dataReplicationResult.__dict__))
+  
+      if schedule.history[0].resultMessage != None:
+        print >>sys.stdout,  '\n\tFinal Result Message: ' +  schedule.history[0].resultMessage
+      else:
+        print >>sys.stdout,  '\n\tFinal Result Message: No Message Provided'
+  
+      if schedule.history[0].hiveResult != None:
+        printHiveResults(schedule.history[0].hiveResult,True)
+  
+        if schedule.history[0].hiveResult.dataReplicationResult != None:
+          printHdfsResults(schedule.history[0].hiveResult.dataReplicationResult,True)
+  
     else:
-      print >>sys.stdout,  '\n\tFinal Result Message: No Message Provided'
-
-    if schedule.history[0].hiveResult != None:
-      printHiveResults(schedule.history[0].hiveResult,True)
-
-      if schedule.history[0].hiveResult.dataReplicationResult != None:
-        printHdfsResults(schedule.history[0].hiveResult.dataReplicationResult,True)
-
+      LOG.debug("schedule hdfs result  was " + str(schedule.history[0].hdfsResult.__dict__))
+      if schedule.history[0].hdfsResult != None:
+        printHdfsResults(schedule.history[0].hdfsResult,True)
   else:
-    LOG.debug("schedule hdfs result  was " + str(schedule.history[0].hdfsResult.__dict__))
-    if schedule.history[0].hdfsResult != None:
-      printHdfsResults(schedule.history[0].hdfsResult,True)
-
+      print >>sys.stdout,  'No history for this schedule.'
   print >>sys.stdout,  '\n'
   return schedule.history[0].success
 
@@ -372,7 +374,7 @@ def addHiveSchedule(cf,cluster,database,table):
   # retrieve the database only job that we can use as a template.
   dbSchedule = getHiveSchedule(cluster,cf['HIVE_SERVICE'],database, cf['DB_TEMPLATE_NAME'])
   if dbSchedule != None :
-    nowDateTime= datetime.datetime.now()
+    nowDateTime= datetime.datetime.utcnow()
     yearFromNow = datetime.timedelta(weeks=+52)
     hiveReplArgs = dbSchedule.hiveArguments
     hiveReplArgs.tableFilters = [{'tableName': table, 'database': database}]
@@ -390,7 +392,7 @@ def addHiveSchedule(cf,cluster,database,table):
 #
 def addHDFSSchedule(cf,cluster,path):
 
-    nowDateTime= datetime.datetime.now()
+    nowDateTime= datetime.datetime.utcnow()
     yearFromNow = datetime.timedelta(weeks=+52)
 
     hdfsReplConf = {"interval": 0,"hdfsArguments":{
@@ -594,7 +596,7 @@ def setup_logging(level):
     level = logging.DEBUG
     procUser = getUsername()
     pid = os.getpid()
-    tsString=datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    tsString=datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
 #    logging.basicConfig(filename='/tmp/' + procUser + '-' + tsString+ '-' + str(pid) + '-bdractivity.log')
     logging.basicConfig()
   else :

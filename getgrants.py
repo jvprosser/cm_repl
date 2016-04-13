@@ -55,9 +55,18 @@ import urllib2_kerberos as ul2k
 import ConfigParser
 
 #sys.path.append('')
-from cm_repl_lib import init,getUsername,getNavData,getSentryGrants
+from cm_repl_lib import init,getUsername,getNavData
 
 LOG = logging.getLogger(__name__)
+
+def getSentryGrants(navData,user,db,table,start,end,LOG):
+#  query="username%3D%3D{0}%3Ballowed%3D%3Dtrue%3Bservice%3D%3Dsentry&startTime={1}&endTime={2}&limit=100&offset=0&format=JSON&attachment=false".format(user,start,end)
+  query="allowed%3D%3Dtrue%3Bservice%3D%3Dsentry&startTime={0}&endTime={1}&limit=1000&offset=0&format=JSON&attachment=false".format(start,end)
+  data = getNavData(navData,"audits",query,LOG)
+
+  return data
+
+
 
 def setup_logging(level):
   ''' set up logging output path '''
@@ -66,7 +75,7 @@ def setup_logging(level):
     level = logging.DEBUG
     procUser = getUsername()
     pid = os.getpid()
-    tsString=datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    tsString=datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
 #    logging.basicConfig(filename='/tmp/' + procUser + '-' + tsString+ '-' + str(pid) + '-bdractivity.log')
     logging.basicConfig()
   else :
@@ -141,7 +150,7 @@ def main(argv):
   prod_nav = {'proto': cf['PROD_NAV_PROTO'],'host': cf['PROD_NAV_HOST'] ,'port': cf['PROD_NAV_PORT'] ,'user':cf['PROD_NAV_USER'], 'passwd' : cf['PROD_NAV_PASSWD']}
   dr_nav   = {'proto': cf['DR_NAV_PROTO'],  'host': cf['DR_NAV_HOST']   ,'port': cf['DR_NAV_PORT']   ,'user':cf['DR_NAV_USER']  , 'passwd' : cf['DR_NAV_PASSWD']}
 
-  nowDateTime= datetime.datetime.now()
+  nowDateTime= datetime.datetime.utcnow()
   yearFromNow = datetime.timedelta(weeks=+52)
   weekFromNow = datetime.timedelta(weeks=+1)
 
@@ -170,7 +179,10 @@ def main(argv):
     # get more recent first
     drSentryCommands.sort(key=lambda r: r['t']   ,reverse=True)
     startTime = drSentryCommands[0]['t']
-    startEpoch=str(int(time.mktime(startTime))) + "000"
+    # it looks like events are stored in the audit db in UTC, so we sub
+    offset = time.timezone if (time.localtime().tm_isdst == 0) else time.altzone
+    newStartTime = int(time.mktime(startTime)) - offset -1
+    startEpoch=str(newStartTime) + "000"
 
 
   print >>sys.stdout, '\n\tRetrieving grants from PROD cluster between {0} and {1}'.format(strftime("%Y-%m-%d %H:%M:%S",startTime),

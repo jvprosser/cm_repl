@@ -9,6 +9,11 @@ import base64
 import json
 import kerberos as k
 import urllib2_kerberos as ul2k
+import sys
+
+
+
+
 
 def init():
 
@@ -125,21 +130,12 @@ def getNavData(navData,navType,query,LOG):
 
     resp = opener.open(getReplUrl)
   except urllib2.HTTPError, e:
-    print >>sys.stderr, '\n\tCould not retrieve location for database \'' + str(e)
+    print >>sys.stderr, '\n\tCould not retrieve audit data \'' + str(e)
+    sys.exit(255)
 
-    return None
   else :
     data = json.load(resp)
     output_json = json.dumps(data)
 
     return data
 
-
-def getSentryGrants(navData,user,db,table,start,end,LOG):
-
-#  query="username%3D%3D{0}%3Ballowed%3D%3Dtrue%3Bservice%3D%3Dsentry&startTime={1}&endTime={2}&limit=100&offset=0&format=JSON&attachment=false".format(user,start,end)
-  query="allowed%3D%3Dtrue%3Bservice%3D%3Dsentry&startTime={0}&endTime={1}&limit=1000&offset=0&format=JSON&attachment=false".format(start,end)
-
-  data = getNavData(navData,"audits",query,LOG)
-
-  return data

@@ -43,6 +43,7 @@ from time import mktime, strftime
 import datetime
 from datetime import timedelta
 
+
 from cm_api.api_client import ApiResource
 import cm_api.endpoints.services
 
@@ -55,12 +56,9 @@ import kerberos as k
 import urllib2_kerberos as ul2k
 
 #sys.path.append('')
-from cm_repl_lib import init,getUsername,getNavData,getSentryGrants
+from cm_repl_lib import init,getUsername,getNavData
 
 LOG = logging.getLogger(__name__)
-
-
-
 
 def setup_logging(level):
   ''' set up logging output path '''
@@ -69,7 +67,7 @@ def setup_logging(level):
     level = logging.DEBUG
     procUser = getUsername()
     pid = os.getpid()
-    tsString=datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    tsString=datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
 #    logging.basicConfig(filename='/tmp/' + procUser + '-' + tsString+ '-' + str(pid) + '-bdractivity.log')
     logging.basicConfig()
   else :
@@ -77,6 +75,18 @@ def setup_logging(level):
     logging.basicConfig()
   # end else
   logging.getLogger().setLevel(level)
+
+
+def getSentryGrants(navData,user,db,table,start,end,LOG):
+
+#  query="username%3D%3D{0}%3Ballowed%3D%3Dtrue%3Bservice%3D%3Dsentry&startTime={1}&endTime={2}&limit=100&offset=0&format=JSON&attachment=false".format(user,start,end)
+  query="allowed%3D%3Dtrue%3Bservice%3D%3Dsentry&startTime={0}&endTime={1}&limit=1000&offset=0&format=JSON&attachment=false".format(start,end)
+
+  data = getNavData(navData,"audits",query,LOG)
+
+  return data
+
+
 
 
 def usage():
@@ -153,13 +163,11 @@ def main(argv,cf):
   prod_nav = {'proto': cf['PROD_NAV_PROTO'],'host': cf['PROD_NAV_HOST'] ,'port': cf['PROD_NAV_PORT'] ,'user':cf['PROD_NAV_USER'], 'passwd' : cf['PROD_NAV_PASSWD']}
   dr_nav   = {'proto': cf['DR_NAV_PROTO'],  'host': cf['DR_NAV_HOST']   ,'port': cf['DR_NAV_PORT']   ,'user':cf['DR_NAV_USER']  , 'passwd' : cf['DR_NAV_PASSWD']}
 
-  nowDateTime= datetime.datetime.now()
+  nowDateTime= datetime.datetime.utcnow()
   yearFromNow = datetime.timedelta(weeks=+52)
 
   startEpoch=str(int(time.mktime((nowDateTime - yearFromNow).timetuple()))) + "000"    
   endEpoch=str(int(time.mktime(nowDateTime.timetuple()))) + "000"
-
-
 
   prodSentry = getSentryGrants(prod_nav,procUser,database,table,startEpoch,endEpoch,LOG)
   drSentry   = getSentryGrants(dr_nav  ,procUser,database,table,startEpoch,endEpoch,LOG)
@@ -172,7 +180,8 @@ def main(argv,cf):
   
     drSentryCommands=   [{'sql': re.sub(r'\s+',' ',f['serviceValues']['operation_text'].lower()), 'u': f['username'].lower(),
                           'd':f['serviceValues']['database_name'].lower(),
-                          't':time.strptime(f['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')} for f in drSentry if f['serviceValues'] ]
+                          't':time.strptime(f['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')} for f in prodSentry if f['serviceValues'] ]
+
   else:
     prodSentryCommands= [{'sql': re.sub(r'\s+',' ',f['serviceValues']['operation_text'].lower()), 'u': f['username'].lower(),
                           'd':f['serviceValues']['database_name'].lower(),
@@ -196,7 +205,7 @@ def main(argv,cf):
   print >>sys.stdout,  '-------------------------------------------------------------------------------------------------'
 
   for r in prodSentryCommands :
-    print >>sys.stdout, '\t{0}\t{1}\t{2}\t{3}'.format(strftime("%Y-%m-%d %H:%M:%S",r['t']),r['d'],r['u'],r['sql'])
+    print >>sys.stdout, '\t{0}\t{1}\t{2}\t{3}'.format(strftime("%Y-%m-%d %H:%M:%S",r['t']),r['d'],r['u'],r['sql']) # 
 
   print >>sys.stdout,  '\n\tDR  Sentry Grants Going Back 12 Months'
   print >>sys.stdout,  '-------------------------------------------------------------------------------------------------'
