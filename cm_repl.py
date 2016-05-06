@@ -74,7 +74,7 @@ def filterAccessablePaths(cf,user,groupList,pathList):
   isOK=False
 
   fsOpener = urllib2.build_opener()
-  fsOpener.add_handler(ul2k.HTTPKerberosAuthHandler())
+#  fsOpener.add_handler(ul2k.HTTPKerberosAuthHandler())
 
   # cache of paths we've checked, so we don't check them twice.
   validList=[]
@@ -88,6 +88,7 @@ def filterAccessablePaths(cf,user,groupList,pathList):
       trimmedPath = re.sub('^ +', '', trimmedPath)
       LOG.debug("Getting file status for path: " + trimmedPath)
 
+      #fsStatUrl = cf['HTTPFS_PROTO']+"://"+cf['HTTPFS_HOST'] + ":" + cf['HTTPFS_PORT'] + "/webhdfs/v1" + trimmedPath + "?user.name=ec2-user&op=GETFILESTATUS"
       fsStatUrl = cf['HTTPFS_PROTO']+"://"+cf['HTTPFS_HOST'] + ":" + cf['HTTPFS_PORT'] + "/webhdfs/v1" + trimmedPath + "?op=GETFILESTATUS"
       LOG.debug("Getting file status with: " + fsStatUrl)
 
@@ -109,6 +110,7 @@ def filterAccessablePaths(cf,user,groupList,pathList):
       if (pOwner == user and perms[0] in ['7','3','2'] ) or (pGroup in groupList and perms[1] in ['7','3','2']) :
         validList.append(p)
       else:
+        #fsAclUrl = cf['HTTPFS_PROTO'] +"://"+ cf['HTTPFS_HOST'] + ":" + cf['HTTPFS_PORT'] + "/webhdfs/v1" + trimmedPath + "?user.name=ec2-user&op=GETACLSTATUS"
         fsAclUrl = cf['HTTPFS_PROTO'] +"://"+ cf['HTTPFS_HOST'] + ":" + cf['HTTPFS_PORT'] + "/webhdfs/v1" + trimmedPath + "?op=GETACLSTATUS"
         LOG.debug("Getting ACLS with: " + fsAclUrl)
         resp = fsOpener.open(fsAclUrl)
@@ -155,6 +157,7 @@ def filterAccessablePaths(cf,user,groupList,pathList):
 # {"owner": "hive", "ownerType": "USER", "location": "hdfs://namespace/user/hive/warehouse/ilimisp01_eciw.db", "database": "ilimisp01_eciw"}
 
 def getDatabaseLocation(cf,database):
+  #getReplUrl = cf['WEBHCAT_PROTO']+"://" + cf['WEBHCAT_HOST'] + ":" + cf['WEBHCAT_PORT'] + "/templeton/v1/ddl/database/" + database + "/?user.name=ec2-user"
   getReplUrl = cf['WEBHCAT_PROTO']+"://" + cf['WEBHCAT_HOST'] + ":" + cf['WEBHCAT_PORT'] + "/templeton/v1/ddl/database/" + database + "/"
 
   LOG.debug( "Polling WebHCat URL: " + getReplUrl )
@@ -185,8 +188,8 @@ def pollReplicationStatus(cf,cluster,service,schedule,verbose):
     time.sleep(mdelay)
     for n in range(tries):
       schedule = getSchedule(cluster,service,schedule.id)
-      LOG.debug("schedule was " + str(schedule.__dict__))
-      LOG.debug("schedule first history  was " + str(schedule.history[0].__dict__))
+      #LOG.debug("schedule was " + str(schedule.__dict__))
+
       active = getScheduleStatus(schedule)
       LOG.debug("Status was " + str(active))
       if active == None or active == True:
@@ -218,15 +221,18 @@ def getScheduleStatus (schedule) :
   if cm_version == 11 :
     return schedule.active
   else :
-    return schedule.history[0].active
+    if len(schedule.history) > 0:
+      return schedule.history[0].active
+    else : # this happens if its a new schedule and has no history.
+      return False
 
 def printScheduleStatus (service,schedule) :
 
-    if schedule.history[0].hdfsResult != None:
+    if len(schedule.history) > 0 and schedule.history[0].hdfsResult != None:
       printHdfsResults(schedule.history[0].hdfsResult,False)
     else:
       print >>sys.stdout,  '\tJob Metrics are not available at this point.'
-    if schedule.history[0].hiveResult != None:
+    if len(schedule.history) > 0 and schedule.history[0].hiveResult != None:
       printHiveResults(schedule.history[0].hiveResult,False)
 
     return getScheduleStatus(schedule)
@@ -237,26 +243,25 @@ def printScheduleStatus (service,schedule) :
 #
 def printScheduleLastResult (cf,service,schedule) :
   if len(schedule.history) > 0:
-    LOG.debug("schedule first history  was " + str(schedule.history[0].__dict__))
   
     if service==cf['HIVE_SERVICE']:
-      LOG.debug("schedule hive resulty  was " + str(schedule.history[0].hiveResult.__dict__))
-      LOG.debug("schedule hive.dataReplicationResult result  was " + str(schedule.history[0].hiveResult.dataReplicationResult.__dict__))
+      #LOG.debug("schedule hive result  was " + str(schedule.history[0].hiveResult.__dict__))
+      #LOG.debug("schedule hive.dataReplicationResult result  was " + str(schedule.history[0].hiveResult.dataReplicationResult.__dict__))
   
-      if schedule.history[0].resultMessage != None:
+      if len(schedule.history) > 0 and schedule.history[0].resultMessage != None:
         print >>sys.stdout,  '\n\tFinal Result Message: ' +  schedule.history[0].resultMessage
       else:
         print >>sys.stdout,  '\n\tFinal Result Message: No Message Provided'
   
-      if schedule.history[0].hiveResult != None:
+      if len(schedule.history) > 0 and schedule.history[0].hiveResult != None:
         printHiveResults(schedule.history[0].hiveResult,True)
   
         if schedule.history[0].hiveResult.dataReplicationResult != None:
           printHdfsResults(schedule.history[0].hiveResult.dataReplicationResult,True)
   
     else:
-      LOG.debug("schedule hdfs result  was " + str(schedule.history[0].hdfsResult.__dict__))
-      if schedule.history[0].hdfsResult != None:
+      #LOG.debug("schedule hdfs result  was " + str(schedule.history[0].hdfsResult.__dict__))
+      if len(schedule.history) > 0 and schedule.history[0].hdfsResult != None:
         printHdfsResults(schedule.history[0].hdfsResult,True)
   else:
       print >>sys.stdout,  'No history for this schedule.'
@@ -466,6 +471,7 @@ def runSchedule(cluster,service,index,dryRun):
 def getAccessPriv(cf,user,groupList,path):
   isOK=False
 
+  #getReplUrl = cf['HTTPFS_PROTO']+"://"+cf['HTTPFS_HOST'] + ":" + cf['HTTPFS_PORT'] + "/webhdfs/v1" + path + "?user.name=ec2-user&op=GETFILESTATUS"
   getReplUrl = cf['HTTPFS_PROTO']+"://"+cf['HTTPFS_HOST'] + ":" + cf['HTTPFS_PORT'] + "/webhdfs/v1" + path + "?op=GETFILESTATUS"
   LOG.debug("Getting file status with: " + getReplUrl)
   opener = urllib2.build_opener()
@@ -483,7 +489,8 @@ def getAccessPriv(cf,user,groupList,path):
   if (pOwner == user and perms[0] in ['7','3','2'] ) or (pGroup == group and perms[0] in ['7','3','2']) :
     isOK=True
   else:
-    getReplUrl = cf['HTTPFS_PROTO']+"://"+cf['HTTPFS_HOST'] + ":" + cf['HTTPFS_PORT'] + "/webhdfs/v1" + path + "?op=GETACLSTATUS"
+    #getReplUrl = cf['HTTPFS_PROTO']+"://"+cf['HTTPFS_HOST'] + ":" + cf['HTTPFS_PORT'] + "/webhdfs/V1" + path + "?user.name=ec2-user&op=GETACLSTATUS"
+    getReplUrl = cf['HTTPFS_PROTO']+"://"+cf['HTTPFS_HOST'] + ":" + cf['HTTPFS_PORT'] + "/webhdfs/V1" + path + "?op=GETACLSTATUS"
     LOG.debug("Getting ACLS with: " + getReplUrl)
     opener = urllib2.build_opener()
     opener.add_handler(ul2k.HTTPKerberosAuthHandler())
@@ -563,13 +570,24 @@ def getHiveSchedule (cluster,service,database,table) :
 def getHdfsSchedule (cluster,service,path) :
     hdfsService =  cluster.get_service(service)
     schedules=hdfsService.get_replication_schedules()
+    if not path.endswith("/"):
+      path = path+"/"
+    LOG.debug( "looking for substrings of " + path)
 
-    output_dict = [x for x in schedules if x.hdfsArguments.sourcePath ==  path]
+    keeper=None
+#    output_dict = [ x for x in schedules if newpath.find( x.hdfsArguments.sourcePath ) != -1 ]
+    maxLen=0
+    for x in schedules:
+      if path.find( x.hdfsArguments.sourcePath ) != -1:
+        if len( x.hdfsArguments.sourcePath ) > maxLen:
+          keeper = x
+          maxLen = len( x.hdfsArguments.sourcePath )
+      
 
-    if len(output_dict) == 0:
-        return None
-    else :
-        return output_dict[0]
+    LOG.debug( "found " + keeper.hdfsArguments.sourcePath)
+
+    return keeper
+    #return output_dict[0]
 
 #
 # get a schedule object given its id
@@ -716,7 +734,7 @@ def main(cf,argv):
 #    return -1
 
   vm_version = cf['CM_VERSION']
-  API = ApiResource(cmHost, cf['CM_PORT'],  version=cf['CM_VERSION'], username=cf['CM_USER'], password=cf['CM_PASSWD'], use_tls=True)
+  API = ApiResource(cmHost, cf['CM_PORT'],  version=cf['CM_VERSION'], username=cf['CM_USER'], password=cf['CM_PASSWD'], use_tls=False)
   LOG.debug('Connected to CM host on ' + cmHost)
 
   procUser = getUsername()
@@ -740,6 +758,8 @@ def main(cf,argv):
     schedule = getHiveSchedule (cluster,service,database,table)
   else:
     schedule = getHdfsSchedule (cluster,service,path)
+    path = schedule.hdfsArguments.sourcePath
+    print >>sys.stderr, '\n\tUsing replication schedule with path: ' + path
 
 # check access privs and abort if none
   validPath=filterAccessablePaths(cf,procUser,procUserGroups,[{'schedule': schedule, 'service': service,'path':path}])
@@ -747,12 +767,15 @@ def main(cf,argv):
     print >>sys.stderr, '\n\tInvalid privs or item does not exist.\n'
     return cf['RET_NOENT']
 
-  if action == 'getStatus':
-    if schedule == None:
+
+  if schedule == None:
       print >>sys.stderr, '\n\tNo replication schedule defined for this object. '
       return cf['RET_NOREP_EXISTS']
-    else:
-      active = getScheduleStatus(schedule)
+
+  LOG.debug('CHECKING IF REPLICATION IS ALREADY UNDERWAY')
+  active = getScheduleStatus(schedule)
+
+  if action == 'getStatus':
       if active == True :
         print >>sys.stderr, '\n\tThere is currently a replication underway for this schedule.\n'
         printScheduleStatus(service,schedule)
@@ -794,6 +817,12 @@ def main(cf,argv):
 
   bdrId = schedule.id
 
+  if active == True :
+    print >>sys.stderr, '\n\tThere is currently a replication underway for this schedule.\n'
+    printScheduleStatus(service,schedule)
+    return cf['RET_REP_ALREADY_UNDERWAY']
+
+
   print >>sys.stdout, '\tScheduling run for id: ' + str(bdrId)
   result = runSchedule(cluster,service,bdrId,dryRun)
   schedule = getSchedule(cluster,service,bdrId)
@@ -811,4 +840,5 @@ def main(cf,argv):
 if __name__ == '__main__':
   cf=init()
   val = main(cf,sys.argv)
-  sys.exit(val)
+  LOG.debug('main returned :' + str(val))
+  os._exit(int(val))
